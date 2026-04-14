@@ -10,7 +10,7 @@ Here's the complete formatted markdown. You can copy this entire content and sav
 **Project**: Peer-to-Peer Encrypted Messaging Application
 **Target Platforms**: Android & iOS (Mobile-first)
 **Technology Stack**: Flutter (Dart)
-**Timeline**: Flexible (~26 weeks for MVP)
+**Timeline**: Flexible (~28 weeks for MVP)
 **Last Updated**: April 13, 2026
 
 ---
@@ -42,6 +42,15 @@ Here's the complete formatted markdown. You can copy this entire content and sav
 - ✅ **Privacy First** - Screenshot prevention, no message history (optional encrypted local cache)
 - ✅ **Anti-Surveillance Guard** - Detects apps/processes attempting to monitor GungChat; warns user and force-disables the offending app
 - ✅ **LAN Optimized** - Prioritizes local network over internet routing
+- ✅ **Typing Indicators** - Real-time "peer is typing..." status over encrypted data channel
+- ✅ **Message Formatting** - URL linkification, inline image preview, code block rendering, emoji/emote support
+- ✅ **Read Receipts** - Encrypted delivery/read confirmations (privacy-respecting, opt-in)
+- ✅ **Presence Status** - Online/offline/away indicators with privacy controls (hideable)
+- ✅ **Unread & Mention Badges** - Notification counters and system-level push alerts
+- ✅ **File Transfer with Validation** - MIME type allowlist, size limits, preview before send
+- ✅ **Local Encrypted Search** - Full-text search over locally cached message history
+- ✅ **Connection Resilience** - Auto-reconnect with session state recovery after network interruptions
+- ✅ **Extended i18n** - Localization beyond EN/ZH (Japanese, Korean, Russian, Spanish, French, German, etc.)
 - ❌ **No Group Chat** - Strictly peer-to-peer only
 
 ### Connection Methods
@@ -223,8 +232,13 @@ lib/
 │   │   ├── contacts_screen.dart        # Contacts list UI
 │   │   ├── discovery_service.dart      # mDNS & contact lookup
 │   │   └── qr_code_screen.dart         # QR code generation/scanning
+│   ├── notifications/
+│   │   └── notification_service.dart   # Push notifications & badge counters
 │   └── settings/
 │       └── settings_screen.dart        # App settings UI
+├── formatters/
+│   ├── message_formatter.dart          # URL linkify, image embed, code blocks
+│   └── emoji_manager.dart              # Emoji/emote rendering & mapping
 ├── models/
 │   ├── message.dart                    # Message data model
 │   ├── contact.dart                    # Contact model
@@ -234,7 +248,15 @@ lib/
 │   └── widgets/                        # Reusable widgets
 ├── l10n/                               # Localization files
 │   ├── app_en.arb                      # English strings
-│   └── app_zh.arb                      # Chinese strings
+│   ├── app_zh.arb                      # Chinese (Simplified) strings
+│   ├── app_zh_TW.arb                   # Chinese (Traditional) strings
+│   ├── app_ja.arb                      # Japanese strings
+│   ├── app_ko.arb                      # Korean strings
+│   ├── app_ru.arb                      # Russian strings
+│   ├── app_es.arb                      # Spanish strings
+│   ├── app_fr.arb                      # French strings
+│   ├── app_de.arb                      # German strings
+│   └── app_pt.arb                      # Portuguese strings
 └── main.dart                           # App entry point
 ```
 
@@ -279,6 +301,12 @@ dependencies:
   # Utilities
   path_provider: ^2.1.0
   uuid: ^4.0.0
+  linkify: ^5.0.0             # URL detection & linkification
+  flutter_linkify: ^6.0.0     # Linkified text widget
+  emoji_picker_flutter: ^1.6.0 # Emoji keyboard & picker
+  flutter_highlight: ^0.7.0   # Code syntax highlighting
+  flutter_local_notifications: ^16.0.0  # System push notifications
+  flutter_app_badger: ^1.5.0  # App icon badge counters
 
 dev_dependencies:
   flutter_test:
@@ -1621,7 +1649,486 @@ class SettingsScreen extends StatelessWidget {
 
 ---
 
-### Phase 10: Testing & Deployment (Weeks 25-26)
+### Phase 9.5: Enhanced UX Features (Weeks 24-26) — *Inspired by lets-chat*
+
+**Goal**: Add chat UX polish features adapted from the lets-chat open source project, re-engineered for P2P encrypted architecture.
+
+> **Source**: Features below are inspired by analysis of [sdelements/lets-chat](https://github.com/sdelements/lets-chat), a self-hosted team chat app. All implementations are redesigned for GungChat's serverless, E2E-encrypted, P2P model.
+
+#### Step 30A: Typing Indicators
+
+Real-time "typing..." status sent over the encrypted WebRTC data channel.
+
+**`lib/features/chat/typing_indicator_service.dart`**:
+
+```dart
+import 'dart:async';
+
+/// Sends/receives typing status over the encrypted P2P data channel.
+/// Typing signals are ephemeral metadata — never persisted or logged.
+class TypingIndicatorService {
+  Timer? _debounceTimer;
+  bool _isTyping = false;
+  final Duration _timeout = const Duration(seconds: 3);
+  final void Function(bool isTyping) onPeerTypingChanged;
+  final void Function(bool isTyping) sendTypingStatus;
+
+  TypingIndicatorService({
+    required this.onPeerTypingChanged,
+    required this.sendTypingStatus,
+  });
+
+  /// Called on every keystroke in the message input.
+  void onLocalKeystroke() {
+    if (!_isTyping) {
+      _isTyping = true;
+      sendTypingStatus(true);
+    }
+    _debounceTimer?.cancel();
+    _debounceTimer = Timer(_timeout, () {
+      _isTyping = false;
+      sendTypingStatus(false);
+    });
+  }
+
+  /// Called when a typing status message arrives from the peer.
+  void onRemoteTypingReceived(bool peerIsTyping) {
+    onPeerTypingChanged(peerIsTyping);
+  }
+
+  void dispose() {
+    _debounceTimer?.cancel();
+  }
+}
+```
+
+#### Step 30B: Message Formatting Pipeline
+
+Client-side formatter that processes plaintext messages into rich display — URL linkification, inline image previews, code block detection, and emoji rendering. Inspired by lets-chat's `media/js/util/message.js` formatter chain.
+
+**`lib/formatters/message_formatter.dart`**:
+
+```dart
+/// Processes raw message text into structured display segments.
+/// All formatting is client-side only — the encrypted payload is always plaintext.
+class MessageFormatter {
+  /// Detect and segment message content into typed parts.
+  static List<MessageSegment> format(String rawText) {
+    final segments = <MessageSegment>[];
+
+    // 1. Code block detection (triple backtick or multiline paste)
+    if (rawText.contains('```') || _isMultilinePaste(rawText)) {
+      segments.add(MessageSegment(type: SegmentType.codeBlock, content: rawText));
+      return segments;
+    }
+
+    // 2. URL detection and linkification
+    final urlPattern = RegExp(
+      r'https?://[^\s<>\]\)]+',
+      caseSensitive: false,
+    );
+
+    int lastIndex = 0;
+    for (final match in urlPattern.allMatches(rawText)) {
+      if (match.start > lastIndex) {
+        segments.add(MessageSegment(
+          type: SegmentType.text,
+          content: rawText.substring(lastIndex, match.start),
+        ));
+      }
+
+      final url = match.group(0)!;
+      if (_isImageUrl(url)) {
+        segments.add(MessageSegment(type: SegmentType.imageEmbed, content: url));
+      } else {
+        segments.add(MessageSegment(type: SegmentType.link, content: url));
+      }
+      lastIndex = match.end;
+    }
+
+    if (lastIndex < rawText.length) {
+      segments.add(MessageSegment(
+        type: SegmentType.text,
+        content: rawText.substring(lastIndex),
+      ));
+    }
+
+    return segments.isEmpty
+        ? [MessageSegment(type: SegmentType.text, content: rawText)]
+        : segments;
+  }
+
+  static bool _isImageUrl(String url) {
+    final lower = url.toLowerCase();
+    return lower.endsWith('.png') ||
+        lower.endsWith('.jpg') ||
+        lower.endsWith('.jpeg') ||
+        lower.endsWith('.gif') ||
+        lower.endsWith('.webp');
+  }
+
+  static bool _isMultilinePaste(String text) {
+    return '\n'.allMatches(text).length >= 3;
+  }
+}
+
+enum SegmentType { text, link, imageEmbed, codeBlock, emoji }
+
+class MessageSegment {
+  final SegmentType type;
+  final String content;
+  const MessageSegment({required this.type, required this.content});
+}
+```
+
+#### Step 30C: Read Receipts (Privacy-Respecting)
+
+Encrypted delivery and read confirmations sent over the data channel. **Opt-in only** — disabled by default to respect privacy. Lets-chat lacked this feature entirely; GungChat adds it with privacy controls.
+
+```dart
+enum ReceiptType { delivered, read }
+
+class ReadReceiptService {
+  bool enabled; // User-configurable, off by default
+
+  ReadReceiptService({this.enabled = false});
+
+  /// Generate an encrypted receipt to send back to the peer.
+  Map<String, dynamic> createReceipt(String messageId, ReceiptType type) {
+    return {
+      'type': 'receipt',
+      'messageId': messageId,
+      'receipt': type.name,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// Process incoming receipt from peer and update message status.
+  void handleReceipt(Map<String, dynamic> data, Function(String, ReceiptType) onReceiptReceived) {
+    if (!enabled) return;
+    final messageId = data['messageId'] as String;
+    final type = ReceiptType.values.byName(data['receipt']);
+    onReceiptReceived(messageId, type);
+  }
+}
+```
+
+#### Step 30D: Presence Status with Privacy Controls
+
+Online/offline/away indicators transmitted over the P2P channel. Unlike lets-chat's server-tracked presence, GungChat's presence is direct peer-to-peer with an option to appear invisible.
+
+```dart
+enum PresenceStatus { online, away, offline, invisible }
+
+class PresenceService {
+  PresenceStatus _currentStatus = PresenceStatus.online;
+  bool showPresence; // User toggle — if false, always appear offline to peers
+
+  PresenceService({this.showPresence = true});
+
+  PresenceStatus get currentStatus => _currentStatus;
+
+  /// Broadcast presence change to connected peer.
+  Map<String, dynamic> setStatus(PresenceStatus status) {
+    _currentStatus = status;
+    return {
+      'type': 'presence',
+      'status': showPresence ? status.name : PresenceStatus.offline.name,
+      'timestamp': DateTime.now().toIso8601String(),
+    };
+  }
+
+  /// Auto-detect away status based on app lifecycle.
+  PresenceStatus detectFromAppState(bool isInForeground) {
+    if (!isInForeground && _currentStatus == PresenceStatus.online) {
+      return PresenceStatus.away;
+    }
+    return _currentStatus;
+  }
+}
+```
+
+#### Step 30E: Notification Badges & Push Alerts
+
+Unread message counters and system notifications, inspired by lets-chat's tab badge/favicon/desktop notification system. Adapted for mobile with Flutter local notifications.
+
+```dart
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:flutter_app_badger/flutter_app_badger.dart';
+
+class NotificationService {
+  final FlutterLocalNotificationsPlugin _notifications =
+      FlutterLocalNotificationsPlugin();
+  int _unreadCount = 0;
+
+  Future<void> initialize() async {
+    const android = AndroidInitializationSettings('@mipmap/ic_launcher');
+    const ios = DarwinInitializationSettings();
+    await _notifications.initialize(
+      const InitializationSettings(android: android, iOS: ios),
+    );
+  }
+
+  /// Show a notification for an incoming message while app is backgrounded.
+  Future<void> showMessageNotification({
+    required String contactName,
+    required String preview, // Truncated or "Encrypted message" if privacy mode
+  }) async {
+    _unreadCount++;
+    FlutterAppBadger.updateBadgeCount(_unreadCount);
+
+    await _notifications.show(
+      contactName.hashCode,
+      contactName,
+      preview,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'messages', 'Messages',
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: DarwinNotificationDetails(),
+      ),
+    );
+  }
+
+  void clearBadge() {
+    _unreadCount = 0;
+    FlutterAppBadger.removeBadge();
+  }
+}
+```
+
+#### Step 30F: File Transfer Validation & Preview
+
+MIME type allowlisting and file size limits before encrypted transmission over the data channel. Adapts lets-chat's server-side Multer validation for client-side P2P use.
+
+```dart
+class FileTransferValidator {
+  static const int maxFileSizeBytes = 50 * 1024 * 1024; // 50 MB
+
+  static const List<String> allowedMimeTypes = [
+    'image/jpeg',
+    'image/png',
+    'image/gif',
+    'image/webp',
+    'video/mp4',
+    'audio/aac',
+    'audio/opus',
+    'application/pdf',
+  ];
+
+  /// Validate file before encryption and transfer.
+  static FileValidationResult validate(String fileName, String mimeType, int sizeBytes) {
+    if (sizeBytes > maxFileSizeBytes) {
+      return FileValidationResult(
+        valid: false,
+        error: 'File exceeds ${maxFileSizeBytes ~/ (1024 * 1024)} MB limit',
+      );
+    }
+    if (!allowedMimeTypes.contains(mimeType)) {
+      return FileValidationResult(
+        valid: false,
+        error: 'File type "$mimeType" not allowed',
+      );
+    }
+    return FileValidationResult(valid: true);
+  }
+}
+
+class FileValidationResult {
+  final bool valid;
+  final String? error;
+  const FileValidationResult({required this.valid, this.error});
+}
+```
+
+#### Step 30G: Local Encrypted Message Search
+
+Full-text search over the optional encrypted local message cache. Lets-chat uses MongoDB text indexes on the server; GungChat implements this client-side using SQLite FTS5 over decrypted messages.
+
+```dart
+class MessageSearchService {
+  final MessageDatabase _db;
+
+  MessageSearchService(this._db);
+
+  /// Search locally cached messages by keyword.
+  /// Only searches decrypted plaintext in the encrypted local store.
+  Future<List<Message>> search(String query, {String? contactId}) async {
+    final db = await _db.database;
+    final where = StringBuffer('content LIKE ?');
+    final args = <dynamic>['%$query%'];
+
+    if (contactId != null) {
+      where.write(' AND (senderId = ? OR recipientId = ?)');
+      args.addAll([contactId, contactId]);
+    }
+
+    final results = await db.query(
+      'messages',
+      where: where.toString(),
+      whereArgs: args,
+      orderBy: 'timestamp DESC',
+      limit: 50,
+    );
+    return results.map((r) => Message.fromJson(r)).toList();
+  }
+}
+```
+
+#### Step 30H: Connection Resilience & Auto-Reconnect
+
+Automatic reconnection with WebRTC session recovery after network interruptions. Inspired by lets-chat's socket reconnect + room rejoin pattern, adapted for P2P data channels.
+
+```dart
+class ConnectionResilience {
+  final WebRTCManager _webrtc;
+  final NetworkMonitor _networkMonitor;
+  int _retryCount = 0;
+  static const int _maxRetries = 10;
+  static const Duration _baseDelay = Duration(seconds: 2);
+
+  ConnectionResilience(this._webrtc, this._networkMonitor);
+
+  /// Monitor connection state and trigger reconnection on failure.
+  void monitorConnection({
+    required String peerIp,
+    required Function onReconnected,
+    required Function onPermanentFailure,
+  }) {
+    _webrtc.onConnectionStateChange = (state) async {
+      if (state == RTCPeerConnectionState.RTCPeerConnectionStateDisconnected ||
+          state == RTCPeerConnectionState.RTCPeerConnectionStateFailed) {
+        await _attemptReconnect(peerIp, onReconnected, onPermanentFailure);
+      }
+    };
+  }
+
+  Future<void> _attemptReconnect(
+    String peerIp,
+    Function onReconnected,
+    Function onPermanentFailure,
+  ) async {
+    while (_retryCount < _maxRetries) {
+      _retryCount++;
+      final delay = _baseDelay * _retryCount; // Exponential backoff
+      await Future.delayed(delay);
+
+      final networkType = await _networkMonitor.getNetworkType();
+      if (networkType == NetworkType.none) continue;
+
+      try {
+        await _webrtc.reconnect(peerIp);
+        _retryCount = 0;
+        onReconnected();
+        return;
+      } catch (_) {
+        // Continue retry loop
+      }
+    }
+    onPermanentFailure();
+  }
+}
+```
+
+#### Step 30I: Extended Localization
+
+Expand i18n support from 2 to 10+ languages. Lets-chat ships with 17 locales; GungChat adopts the most widely-used ones.
+
+**Additional locale files** (add to `lib/l10n/`):
+
+**`app_ja.arb`** (Japanese):
+```json
+{
+  "appTitle": "GungChat",
+  "sendMessage": "送信",
+  "voiceCall": "音声通話",
+  "videoCall": "ビデオ通話",
+  "settings": "設定",
+  "privacySettings": "プライバシー設定",
+  "ephemeralMessages": "消えるメッセージ",
+  "autoDestruct": "閲覧後に自動削除",
+  "typing": "入力中...",
+  "online": "オンライン",
+  "offline": "オフライン",
+  "searchMessages": "メッセージを検索"
+}
+```
+
+**`app_ko.arb`** (Korean):
+```json
+{
+  "appTitle": "GungChat",
+  "sendMessage": "보내기",
+  "voiceCall": "음성 통화",
+  "videoCall": "영상 통화",
+  "settings": "설정",
+  "privacySettings": "개인정보 설정",
+  "ephemeralMessages": "사라지는 메시지",
+  "autoDestruct": "확인 후 자동 삭제",
+  "typing": "입력 중...",
+  "online": "온라인",
+  "offline": "오프라인",
+  "searchMessages": "메시지 검색"
+}
+```
+
+**`app_ru.arb`** (Russian):
+```json
+{
+  "appTitle": "GungChat",
+  "sendMessage": "Отправить",
+  "voiceCall": "Голосовой звонок",
+  "videoCall": "Видеозвонок",
+  "settings": "Настройки",
+  "privacySettings": "Конфиденциальность",
+  "ephemeralMessages": "Исчезающие сообщения",
+  "autoDestruct": "Автоудаление после просмотра",
+  "typing": "печатает...",
+  "online": "В сети",
+  "offline": "Не в сети",
+  "searchMessages": "Поиск сообщений"
+}
+```
+
+#### Step 30J: Message Grouping UX
+
+Consecutive messages from the same sender within a short time window are visually grouped (no repeated avatar/name). Adapted from lets-chat's "fragment" rendering pattern.
+
+```dart
+/// Determines if a message should render as a "fragment" (grouped with previous).
+class MessageGroupingHelper {
+  static const Duration _groupingWindow = Duration(minutes: 2);
+
+  /// Returns true if this message should be rendered without header (name/avatar).
+  static bool isFragment(Message current, Message? previous) {
+    if (previous == null) return false;
+    if (current.senderId != previous.senderId) return false;
+    return current.timestamp.difference(previous.timestamp) <= _groupingWindow;
+  }
+}
+```
+
+#### Verification (Phase 9.5)
+
+- [ ] Typing indicator appears within 500ms of peer keystroke
+- [ ] URLs in messages are clickable; image URLs render inline preview
+- [ ] Code blocks (triple backtick or multiline paste) render with monospace styling
+- [ ] Read receipts toggle works; receipts encrypted and not sent when disabled
+- [ ] Presence status reflects app lifecycle (foreground=online, background=away)
+- [ ] Invisible mode hides presence from peer
+- [ ] System notification shown when message arrives while app is backgrounded
+- [ ] App icon badge shows unread count
+- [ ] File validation rejects oversized and disallowed MIME types before transfer
+- [ ] Local search returns results from encrypted message cache
+- [ ] Auto-reconnect succeeds after WiFi toggle within 30 seconds
+- [ ] Consecutive same-sender messages render as grouped fragments
+- [ ] App displays correctly in all 10+ supported languages
+
+---
+
+### Phase 10: Testing & Deployment (Weeks 27-28)
 
 **Goal**: Comprehensive testing and open source release.
 
@@ -1762,11 +2269,22 @@ Create:
 - ✅ Video calls at 320p with < 500 kbps bandwidth
 - ✅ Messages self-destruct per configuration
 - ✅ No plaintext data stored on device
+- ✅ Typing indicators appear within 500ms
+- ✅ Read receipts delivered when enabled (opt-in)
+- ✅ Presence status reflects real-time connection state
+- ✅ File transfers validated (MIME type + size) before send
+- ✅ Local encrypted search returns results in < 200ms
+- ✅ Auto-reconnect recovers session within 30 seconds
+- ✅ System notifications and badge counters functional
 
 ### Platform Support
 
 - ✅ Android 9+ (API level 28+)
 - ✅ iOS 13+ (iPhone 6s and newer)
+
+### Localization
+
+- ✅ 10+ languages: English, Chinese (Simplified & Traditional), Japanese, Korean, Russian, Spanish, French, German, Portuguese
 
 ### Open Source
 
@@ -1841,7 +2359,27 @@ Create:
 
 - **Solo Developer (Full-time)**: ~6-8 months for MVP
 - **Team of 2-3 (Part-time)**: ~9-12 months for MVP
-- **Experienced Team (Full-time)**: ~3-4 months for MVP
+- **Estimated Team (Full-time)**: ~3-4 months for MVP
+
+### Features Inspired by lets-chat (Open Source Attribution)
+
+The following GungChat features were identified and adapted from analysis of [sdelements/lets-chat](https://github.com/sdelements/lets-chat) (MIT License), a self-hosted team chat app. All implementations are **redesigned from scratch** for GungChat's serverless, E2E-encrypted, P2P architecture:
+
+| lets-chat Feature | GungChat Adaptation | Key Difference |
+|---|---|---|
+| Typing indicators (socket.io) | Typing over encrypted WebRTC data channel | No server relay; peer-to-peer only |
+| Message formatting pipeline | Client-side URL/image/code block formatter | All formatting on decrypted plaintext client-side |
+| Presence tracking (server-mediated) | P2P presence with invisible mode | Privacy-first: opt-in, no server tracking |
+| Desktop notifications + tab badges | Mobile push notifications + app badges | Native mobile notifications via Flutter |
+| File upload with MIME validation | Client-side validation before encrypted transfer | No server upload; direct P2P with encryption |
+| Transcript search (MongoDB text index) | Local encrypted SQLite FTS search | Searches decrypted cache only; no server index |
+| Socket reconnect + room rejoin | WebRTC auto-reconnect with exponential backoff | Session recovery over P2P, not server sessions |
+| Message fragments (same-sender grouping) | Message grouping within 2-min window | Same UX concept, different rendering stack |
+| 17-locale i18n (server-side) | 10+ locale Flutter ARB files | Client-only; no server-side locale detection |
+| Emote/emoji YAML packs | Emoji picker + inline emoji rendering | Standard Unicode emoji instead of custom packs |
+| Read receipts | **New** (not in lets-chat) — opt-in encrypted receipts | Privacy-respecting; lets-chat lacked this entirely |
+| OTR message pass-through | Not needed — all messages are E2E encrypted by default | GungChat is encrypted-first by design |
+| Auth throttling / rate limiting | Connection attempt rate limiting | Adapted for P2P connection requests |
 
 ### Technology Alternatives Considered
 
