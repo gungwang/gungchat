@@ -1,0 +1,35 @@
+name: gungchat
+description: Privacy-first peer-to-peer encrypted messaging application.
+publish_to: none
+version: 0.1.0+1
+
+environment:
+  sdk: '>=3.4.0 <4.0.0'
+  flutter: '>=3.24.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+  flutter_localizations:
+    sdk: flutter
+  connectivity_plus: ^6.1.4
+  cryptography: ^2.7.0
+  cupertino_icons: ^1.0.8
+  flutter_riverpod: ^2.6.1
+  flutter_secure_storage: ^9.2.4
+  flutter_webrtc: ^1.4.1
+  multicast_dns: ^0.3.3
+  path: ^1.9.1
+  path_provider: ^2.1.5
+  permission_handler: ^11.4.0
+  shared_preferences: ^2.5.3
+  sqflite: ^2.4.2
+  uuid: ^4.5.1
+
+dev_dependencies:
+  flutter_lints: ^5.0.0
+  flutter_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true
