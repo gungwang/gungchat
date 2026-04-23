@@ -321,6 +321,8 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   Future<bool> sendMessage({
     required String body,
     required bool burnAfterRead,
+    String? replyToMessageId,
+    String? replyToBody,
   }) async {
     final conversationId = state.conversationId;
     final sharedSecret = _sharedSecret;
@@ -342,6 +344,8 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       body: body,
       burnAfterRead: burnAfterRead,
       deliveryState: MessageDeliveryState.sending,
+      replyToMessageId: replyToMessageId,
+      replyToBody: replyToBody,
     );
     _refreshConversation(conversationId);
 
@@ -357,6 +361,8 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         createdAt: message.createdAt,
         burnAfterRead: burnAfterRead,
         expiresAt: message.expiresAt,
+        replyToMessageId: message.replyToMessageId,
+        replyToBody: message.replyToBody,
       );
 
       await clearLocalTyping(notifyPeer: false);
@@ -791,6 +797,8 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
           isOutgoing: false,
           burnAfterRead: envelope.burnAfterRead ?? true,
           expiresAt: envelope.expiresAt,
+          replyToMessageId: envelope.replyToMessageId,
+          replyToBody: envelope.replyToBody,
         ),
       );
       await _sendDeliveryReceipt(messageId);
@@ -1121,8 +1129,11 @@ class PeerTransportEnvelope {
     required this.createdAt,
     required this.burnAfterRead,
     this.expiresAt,
+    this.replyToMessageId,
+    this.replyToBody,
   })  : kind = PeerTransportEnvelopeKind.message,
         isTyping = null,
+      presenceStatus = null,
         receiptState = null;
 
   const PeerTransportEnvelope.typing({
@@ -1135,7 +1146,9 @@ class PeerTransportEnvelope {
         messageId = null,
         payload = null,
         burnAfterRead = null,
-        expiresAt = null;
+        expiresAt = null,
+        replyToMessageId = null,
+        replyToBody = null;
 
   const PeerTransportEnvelope.presence({
     required this.senderFingerprint,
@@ -1147,7 +1160,9 @@ class PeerTransportEnvelope {
         messageId = null,
         payload = null,
         burnAfterRead = null,
-        expiresAt = null;
+        expiresAt = null,
+        replyToMessageId = null,
+        replyToBody = null;
 
   const PeerTransportEnvelope.receipt({
     required this.messageId,
@@ -1159,7 +1174,9 @@ class PeerTransportEnvelope {
         presenceStatus = null,
         payload = null,
         burnAfterRead = null,
-        expiresAt = null;
+        expiresAt = null,
+        replyToMessageId = null,
+        replyToBody = null;
 
   final PeerTransportEnvelopeKind kind;
   final String? messageId;
@@ -1168,6 +1185,8 @@ class PeerTransportEnvelope {
   final DateTime createdAt;
   final bool? burnAfterRead;
   final DateTime? expiresAt;
+  final String? replyToMessageId;
+  final String? replyToBody;
   final bool? isTyping;
   final PeerPresenceStatus? presenceStatus;
   final MessageDeliveryState? receiptState;
@@ -1182,6 +1201,8 @@ class PeerTransportEnvelope {
         'payload': payload!.toJson(),
         'burnAfterRead': burnAfterRead,
         'expiresAt': expiresAt?.toIso8601String(),
+        'replyToMessageId': replyToMessageId,
+        'replyToBody': replyToBody,
       } else if (kind == PeerTransportEnvelopeKind.typing) ...<String, dynamic>{
         'isTyping': isTyping,
       } else if (kind == PeerTransportEnvelopeKind.presence) ...<String, dynamic>{
@@ -1247,6 +1268,8 @@ class PeerTransportEnvelope {
       expiresAt: json['expiresAt'] == null
           ? null
           : DateTime.parse(json['expiresAt'] as String),
+      replyToMessageId: json['replyToMessageId'] as String?,
+      replyToBody: json['replyToBody'] as String?,
     );
   }
 

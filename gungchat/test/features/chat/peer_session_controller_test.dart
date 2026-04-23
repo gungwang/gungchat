@@ -22,6 +22,8 @@ void main() {
         payload: payload,
         createdAt: DateTime.utc(2025, 1, 2, 3, 4, 5),
         burnAfterRead: true,
+        replyToMessageId: 'message-0',
+        replyToBody: 'earlier encrypted message',
       );
 
       final decoded = PeerTransportEnvelope.decodeTransportString(
@@ -32,6 +34,8 @@ void main() {
       expect(decoded.messageId, 'message-1');
       expect(decoded.senderFingerprint, 'aa:bb:cc:dd');
       expect(decoded.burnAfterRead, isTrue);
+      expect(decoded.replyToMessageId, 'message-0');
+      expect(decoded.replyToBody, 'earlier encrypted message');
       expect(decoded.payload, isNotNull);
       expect(decoded.payload!.cipherText, payload.cipherText);
     });
