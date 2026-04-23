@@ -1,3 +1,4 @@
+import 'package:app_links/app_links.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -10,8 +11,11 @@ import '../core/networking/webrtc_manager.dart';
 import '../core/storage/message_db.dart';
 import '../core/storage/secure_storage.dart';
 import '../features/chat/ephemeral_manager.dart';
+import '../features/chat/pending_peer_input.dart';
 import '../features/chat/peer_connect_intent.dart';
+import '../features/chat/peer_deep_link_service.dart';
 import '../features/chat/peer_invitation_builder.dart';
+import '../features/chat/peer_invitation_parser.dart';
 import '../features/chat/message_service.dart';
 import '../features/chat/peer_session_controller.dart';
 import '../features/contacts/contact_book_controller.dart';
@@ -27,11 +31,17 @@ final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 final navigationIndexProvider = StateProvider<int>((ref) => 0);
 final selectedContactFingerprintProvider =
     StateProvider<String?>((ref) => null);
+final pendingPeerInputProvider =
+  StateProvider<PendingPeerInput?>((ref) => null);
 final pendingPeerConnectIntentProvider =
   StateProvider<PeerConnectIntent?>((ref) => null);
 
 final secureStorageProvider = Provider<AppSecureStorage>((ref) {
   return AppSecureStorage();
+});
+
+final appLinksProvider = Provider<AppLinks>((ref) {
+  return AppLinks();
 });
 
 final cryptoServiceProvider = Provider<CryptoService>((ref) {
@@ -113,6 +123,14 @@ final peerSessionControllerProvider =
 
 final peerInvitationBuilderProvider = Provider<PeerInvitationBuilder>((ref) {
   return const PeerInvitationBuilder();
+});
+
+final peerInvitationParserProvider = Provider<PeerInvitationParser>((ref) {
+  return const PeerInvitationParser();
+});
+
+final peerDeepLinkServiceProvider = Provider<PeerDeepLinkService>((ref) {
+  return const PeerDeepLinkService();
 });
 
 final contactExchangeServiceProvider = Provider<ContactExchangeService>((ref) {

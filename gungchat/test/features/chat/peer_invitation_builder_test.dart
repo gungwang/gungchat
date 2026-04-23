@@ -23,7 +23,8 @@ void main() {
         manualUri: 'gungchat://192.168.1.24:45454?fingerprint=aa:bb:cc:dd',
       );
 
-      expect(draft.hasOffer, isFalse);
+      expect(draft.kind, PeerInvitationDraftKind.connect);
+      expect(draft.hasReadyBundle, isFalse);
       expect(draft.status, contains('generate a fresh offer'));
       expect(draft.steps.first, contains('Press Connect'));
     });
@@ -52,11 +53,46 @@ void main() {
         manualUri: 'gungchat://192.168.1.24:45454?fingerprint=aa:bb:cc:dd',
       );
 
-      expect(draft.hasOffer, isTrue);
+      expect(draft.kind, PeerInvitationDraftKind.offer);
+      expect(draft.hasReadyBundle, isTrue);
       expect(draft.clipboardText, contains('offer-payload'));
       expect(draft.clipboardText, contains('ice-payload'));
       expect(draft.clipboardText, contains('192.168.1.24:45454'));
       expect(draft.clipboardText, contains('session-123'));
+    });
+
+    test('builds reply text once an answer exists', () {
+      final state = PeerSessionState(
+        sessionId: 'session-456',
+        expectedRemoteFingerprint: 'aa:bb:cc:dd',
+        role: PeerSessionRole.responder,
+        localSignals: [
+          ShareableSignal(
+            type: SignalingEnvelopeType.answer,
+            encoded: 'answer-payload',
+            createdAt: DateTime(2026, 4, 23),
+          ),
+          ShareableSignal(
+            type: SignalingEnvelopeType.iceCandidate,
+            encoded: 'ice-payload',
+            createdAt: DateTime(2026, 4, 23),
+          ),
+        ],
+      );
+
+      final draft = builder.build(
+        contact: contact,
+        sessionState: state,
+        manualUri: 'gungchat://192.168.1.24:45454?fingerprint=aa:bb:cc:dd',
+      );
+
+      expect(draft.kind, PeerInvitationDraftKind.reply);
+      expect(draft.hasReadyBundle, isTrue);
+      expect(draft.isReply, isTrue);
+      expect(draft.copyActionLabel, 'Copy Reply');
+      expect(draft.clipboardText, contains('GungChat connection reply'));
+      expect(draft.clipboardText, contains('answer-payload'));
+      expect(draft.clipboardText, contains('ice-payload'));
     });
   });
 }
