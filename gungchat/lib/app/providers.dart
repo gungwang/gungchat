@@ -10,6 +10,8 @@ import '../core/networking/webrtc_manager.dart';
 import '../core/storage/message_db.dart';
 import '../core/storage/secure_storage.dart';
 import '../features/chat/ephemeral_manager.dart';
+import '../features/chat/peer_connect_intent.dart';
+import '../features/chat/peer_invitation_builder.dart';
 import '../features/chat/message_service.dart';
 import '../features/chat/peer_session_controller.dart';
 import '../features/contacts/contact_book_controller.dart';
@@ -25,6 +27,8 @@ final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
 final navigationIndexProvider = StateProvider<int>((ref) => 0);
 final selectedContactFingerprintProvider =
     StateProvider<String?>((ref) => null);
+final pendingPeerConnectIntentProvider =
+  StateProvider<PeerConnectIntent?>((ref) => null);
 
 final secureStorageProvider = Provider<AppSecureStorage>((ref) {
   return AppSecureStorage();
@@ -105,6 +109,10 @@ final peerSessionControllerProvider =
   );
   ref.onDispose(controller.dispose);
   return controller;
+});
+
+final peerInvitationBuilderProvider = Provider<PeerInvitationBuilder>((ref) {
+  return const PeerInvitationBuilder();
 });
 
 final contactExchangeServiceProvider = Provider<ContactExchangeService>((ref) {

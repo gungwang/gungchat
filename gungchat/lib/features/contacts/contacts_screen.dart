@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../app/providers.dart';
 import '../../core/encryption/key_manager.dart';
 import '../../models/contact.dart';
+import '../chat/peer_connect_intent.dart';
 import 'contact_exchange_service.dart';
 import 'contact_qr_scanner_screen.dart';
 import 'discovery_service.dart';
@@ -107,38 +108,51 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   Future<void> _saveDiscoveredPeer(
     DiscoveryCandidate candidate, {
     bool openInChat = false,
+    bool connect = false,
   }) async {
-    final exchangeService = ref.read(contactExchangeServiceProvider);
-    late final Contact contact;
-
-    if (candidate.contactPayload != null) {
-      final contactCard =
-          exchangeService.decodeContactCard(candidate.contactPayload!);
-      contact = exchangeService.contactFromCard(contactCard).copyWith(
-            lastKnownAddress: '${candidate.host}:${candidate.port}',
-            lastSeenAt: DateTime.now(),
-            isLanDiscovered: true,
-          );
-    } else {
-      contact = Contact(
-        id: candidate.fingerprint ?? '${candidate.host}:${candidate.port}',
-        displayName: candidate.displayName,
-        fingerprint: candidate.fingerprint ?? 'unknown',
-        lastKnownAddress: '${candidate.host}:${candidate.port}',
-        lastSeenAt: DateTime.now(),
-        isLanDiscovered: true,
-      );
-    }
+    final contact = _contactFromDiscoveryCandidate(candidate);
 
     ref.read(contactBookProvider.notifier).addOrUpdate(contact);
-    if (openInChat) {
+    if (connect) {
+      _startConnectFlow(contact.fingerprint);
+    } else if (openInChat) {
       _openContactInChat(contact.fingerprint);
     }
     _showSnack('Saved ${candidate.displayName}');
   }
 
+  Contact _contactFromDiscoveryCandidate(DiscoveryCandidate candidate) {
+    final exchangeService = ref.read(contactExchangeServiceProvider);
+
+    if (candidate.contactPayload != null) {
+      final contactCard =
+          exchangeService.decodeContactCard(candidate.contactPayload!);
+      return exchangeService.contactFromCard(contactCard).copyWith(
+            lastKnownAddress: '${candidate.host}:${candidate.port}',
+            lastSeenAt: DateTime.now(),
+            isLanDiscovered: true,
+          );
+    }
+
+    return Contact(
+      id: candidate.fingerprint ?? '${candidate.host}:${candidate.port}',
+      displayName: candidate.displayName,
+      fingerprint: candidate.fingerprint ?? 'unknown',
+      lastKnownAddress: '${candidate.host}:${candidate.port}',
+      lastSeenAt: DateTime.now(),
+      isLanDiscovered: true,
+    );
+  }
+
   void _openContactInChat(String fingerprint) {
     ref.read(selectedContactFingerprintProvider.notifier).state = fingerprint;
+    ref.read(navigationIndexProvider.notifier).state = 0;
+  }
+
+  void _startConnectFlow(String fingerprint) {
+    ref.read(selectedContactFingerprintProvider.notifier).state = fingerprint;
+    ref.read(pendingPeerConnectIntentProvider.notifier).state =
+        PeerConnectIntent(fingerprint: fingerprint);
     ref.read(navigationIndexProvider.notifier).state = 0;
   }
 
@@ -425,6 +439,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                             onSave: () => _saveDiscoveredPeer(peer),
                             onOpenInChat: () =>
                                 _saveDiscoveredPeer(peer, openInChat: true),
+                            onConnect: () =>
+                                _saveDiscoveredPeer(peer, connect: true),
                             onCopyUri: () => _copyText(
                               'Manual URI',
                               ref
@@ -478,6 +494,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                                 contact.fingerprint,
                             onOpenChat: () =>
                                 _openContactInChat(contact.fingerprint),
+                            onConnect: () =>
+                                _startConnectFlow(contact.fingerprint),
                           ),
                           if (contact != savedContacts.last)
                             const Divider(height: 24),
@@ -499,6 +517,7 @@ class _DiscoveryPeerTile extends StatelessWidget {
     required this.candidate,
     required this.onSave,
     required this.onOpenInChat,
+    required this.onConnect,
     required this.onCopyUri,
     this.onCopyPayload,
   });
@@ -506,6 +525,7 @@ class _DiscoveryPeerTile extends StatelessWidget {
   final DiscoveryCandidate candidate;
   final VoidCallback onSave;
   final VoidCallback onOpenInChat;
+  final VoidCallback onConnect;
   final VoidCallback onCopyUri;
   final VoidCallback? onCopyPayload;
 
@@ -548,6 +568,11 @@ class _DiscoveryPeerTile extends StatelessWidget {
               icon: const Icon(Icons.chat_bubble_outline),
               label: const Text('Open In Chat'),
             ),
+            FilledButton.icon(
+              onPressed: onConnect,
+              icon: const Icon(Icons.wifi_tethering_outlined),
+              label: const Text('Connect'),
+            ),
           ],
         ),
       ],
@@ -560,11 +585,13 @@ class _SavedContactTile extends StatelessWidget {
     required this.contact,
     required this.isSelected,
     required this.onOpenChat,
+    required this.onConnect,
   });
 
   final Contact contact;
   final bool isSelected;
   final VoidCallback onOpenChat;
+  final VoidCallback onConnect;
 
   @override
   Widget build(BuildContext context) {
@@ -603,6 +630,11 @@ class _SavedContactTile extends StatelessWidget {
               onPressed: onOpenChat,
               icon: const Icon(Icons.chat_bubble_outline),
               label: const Text('Open In Chat'),
+            ),
+            FilledButton.icon(
+              onPressed: onConnect,
+              icon: const Icon(Icons.wifi_tethering_outlined),
+              label: const Text('Connect'),
             ),
           ],
         ),
