@@ -14,6 +14,7 @@ import '../../core/networking/webrtc_manager.dart';
 import '../../models/contact.dart';
 import '../../models/message.dart';
 import 'message_service.dart';
+import 'presence_status.dart';
 
 typedef LoadLocalIdentity = Future<DeviceIdentity> Function();
 typedef LoadMessageService = Future<MessageService> Function();
@@ -107,6 +108,7 @@ class PeerSessionState {
     this.targetDisplayName,
     this.targetAddress,
     this.isRemoteTyping = false,
+    this.remotePresenceStatus,
     this.history = const [],
   });
 
@@ -125,6 +127,7 @@ class PeerSessionState {
   final String? targetDisplayName;
   final String? targetAddress;
   final bool isRemoteTyping;
+  final PeerPresenceStatus? remotePresenceStatus;
   final List<PeerSessionHistoryEntry> history;
 
   bool get isSessionActive => sessionId != null;
@@ -150,6 +153,7 @@ class PeerSessionState {
     Object? targetDisplayName = _sentinel,
     Object? targetAddress = _sentinel,
     bool? isRemoteTyping,
+    Object? remotePresenceStatus = _sentinel,
     List<PeerSessionHistoryEntry>? history,
   }) {
     return PeerSessionState(
@@ -185,6 +189,9 @@ class PeerSessionState {
           ? this.targetAddress
           : targetAddress as String?,
       isRemoteTyping: isRemoteTyping ?? this.isRemoteTyping,
+      remotePresenceStatus: identical(remotePresenceStatus, _sentinel)
+          ? this.remotePresenceStatus
+          : remotePresenceStatus as PeerPresenceStatus?,
       history: history ?? this.history,
     );
   }
@@ -228,6 +235,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   Timer? _localTypingTimer;
   Timer? _remoteTypingTimer;
   bool _localTypingActive = false;
+  PeerPresenceStatus? _lastSentPresenceStatus;
 
   Future<void> startOffer({Contact? targetContact}) async {
     final identity = await _ensureLocalIdentity();
@@ -374,12 +382,34 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   Future<void> resetSession() async {
     await clearLocalTyping(notifyPeer: false);
     _remoteTypingTimer?.cancel();
+    _lastSentPresenceStatus = null;
     _sharedSecret = null;
     _peerConnectionReady = false;
     _hasRemoteDescription = false;
     _pendingRemoteIceCandidates.clear();
     await _webRtcManager.close();
     state = const PeerSessionState();
+  }
+
+  Future<void> syncPresence(PeerPresenceStatus status) async {
+    if (!state.isTransportReady || _lastSentPresenceStatus == status) {
+      return;
+    }
+
+    final identity = await _ensureLocalIdentity();
+
+    try {
+      await _webRtcManager.sendText(
+        PeerTransportEnvelope.presence(
+          senderFingerprint: identity.fingerprint,
+          createdAt: DateTime.now(),
+          presenceStatus: status,
+        ).encodeTransportString(),
+      );
+      _lastSentPresenceStatus = status;
+    } catch (error, stackTrace) {
+      debugPrint('Presence update failed: $error\n$stackTrace');
+    }
   }
 
   Future<void> markMessagesRead({
@@ -718,6 +748,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         _handleRemoteTypingEnvelope(envelope);
         return;
       }
+      if (envelope.kind == PeerTransportEnvelopeKind.presence) {
+        _handlePresenceEnvelope(envelope);
+        return;
+      }
       if (envelope.kind == PeerTransportEnvelopeKind.receipt) {
         await _handleReceiptEnvelope(envelope);
         return;
@@ -803,7 +837,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       _localTypingTimer?.cancel();
       _remoteTypingTimer?.cancel();
       _localTypingActive = false;
-      nextState = nextState.copyWith(isRemoteTyping: false);
+      _lastSentPresenceStatus = null;
+      nextState = nextState.copyWith(
+        isRemoteTyping: false,
+        remotePresenceStatus: null,
+      );
     }
 
     if (connectionState == WebRtcSessionState.open) {
@@ -903,6 +941,22 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     _remoteTypingTimer = Timer(const Duration(seconds: 4), () {
       state = state.copyWith(isRemoteTyping: false);
     });
+  }
+
+  void _handlePresenceEnvelope(PeerTransportEnvelope envelope) {
+    final conversationId = state.conversationId ??
+        conversationIdForFingerprint(envelope.senderFingerprint);
+    final presenceStatus = envelope.presenceStatus;
+
+    state = state.copyWith(
+      remoteFingerprint: envelope.senderFingerprint,
+      conversationId: conversationId,
+      remotePresenceStatus: presenceStatus,
+      lastEvent: presenceStatus == null ||
+              presenceStatus == PeerPresenceStatus.hidden
+          ? 'Peer presence is hidden.'
+          : 'Peer is now ${presenceStatus.label.toLowerCase()}.',
+    );
   }
 
   Future<void> _handleReceiptEnvelope(PeerTransportEnvelope envelope) async {
@@ -1054,6 +1108,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
 enum PeerTransportEnvelopeKind {
   message,
   typing,
+  presence,
   receipt,
 }
 
@@ -1075,6 +1130,19 @@ class PeerTransportEnvelope {
     required this.createdAt,
     required this.isTyping,
   })  : kind = PeerTransportEnvelopeKind.typing,
+        presenceStatus = null,
+        receiptState = null,
+        messageId = null,
+        payload = null,
+        burnAfterRead = null,
+        expiresAt = null;
+
+  const PeerTransportEnvelope.presence({
+    required this.senderFingerprint,
+    required this.createdAt,
+    required this.presenceStatus,
+  })  : kind = PeerTransportEnvelopeKind.presence,
+        isTyping = null,
         receiptState = null,
         messageId = null,
         payload = null,
@@ -1088,6 +1156,7 @@ class PeerTransportEnvelope {
     required this.receiptState,
   })  : kind = PeerTransportEnvelopeKind.receipt,
         isTyping = null,
+        presenceStatus = null,
         payload = null,
         burnAfterRead = null,
         expiresAt = null;
@@ -1100,6 +1169,7 @@ class PeerTransportEnvelope {
   final bool? burnAfterRead;
   final DateTime? expiresAt;
   final bool? isTyping;
+  final PeerPresenceStatus? presenceStatus;
   final MessageDeliveryState? receiptState;
 
   Map<String, dynamic> toJson() {
@@ -1114,6 +1184,8 @@ class PeerTransportEnvelope {
         'expiresAt': expiresAt?.toIso8601String(),
       } else if (kind == PeerTransportEnvelopeKind.typing) ...<String, dynamic>{
         'isTyping': isTyping,
+      } else if (kind == PeerTransportEnvelopeKind.presence) ...<String, dynamic>{
+        'presenceStatus': presenceStatus!.name,
       } else ...<String, dynamic>{
         'messageId': messageId,
         'receiptState': receiptState!.name,
@@ -1126,6 +1198,7 @@ class PeerTransportEnvelope {
   factory PeerTransportEnvelope.fromJson(Map<String, dynamic> json) {
     final kind = switch (json['kind'] as String?) {
       'typing' => PeerTransportEnvelopeKind.typing,
+      'presence' => PeerTransportEnvelopeKind.presence,
       'receipt' => PeerTransportEnvelopeKind.receipt,
       _ => PeerTransportEnvelopeKind.message,
     };
@@ -1135,6 +1208,18 @@ class PeerTransportEnvelope {
         senderFingerprint: json['senderFingerprint'] as String,
         createdAt: DateTime.parse(json['createdAt'] as String),
         isTyping: json['isTyping'] as bool? ?? false,
+      );
+    }
+
+    if (kind == PeerTransportEnvelopeKind.presence) {
+      return PeerTransportEnvelope.presence(
+        senderFingerprint: json['senderFingerprint'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        presenceStatus: json['presenceStatus'] == null
+            ? PeerPresenceStatus.hidden
+            : PeerPresenceStatus.values.byName(
+                json['presenceStatus'] as String,
+              ),
       );
     }
 

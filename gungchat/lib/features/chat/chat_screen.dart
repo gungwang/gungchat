@@ -16,6 +16,7 @@ import 'peer_connect_intent.dart';
 import 'peer_invitation_builder.dart';
 import 'peer_invitation_parser.dart';
 import 'peer_session_controller.dart';
+import 'presence_status.dart';
 import 'widgets/message_bubble.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -214,6 +215,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     return remoteFingerprint ?? 'Peer';
+  }
+
+  Future<void> _syncPresenceStatus(PeerPresenceStatus status) async {
+    await ref.read(peerSessionControllerProvider.notifier).syncPresence(status);
   }
 
   Future<void> _consumeConnectIntent(PeerConnectIntent intent) async {
@@ -487,6 +492,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final savedContacts = ref.watch(contactBookProvider);
     final selectedContact = ref.watch(selectedContactProvider);
     final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
+    final localPresenceStatus = ref.watch(localPresenceStatusProvider);
 
     final selectedConversationId = selectedContact == null
         ? null
@@ -525,6 +531,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         : ref
             .read(peerDeepLinkServiceProvider)
             .buildInputUri(invitationDraft.clipboardText);
+
+    if (peerSession.isTransportReady) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        unawaited(_syncPresenceStatus(localPresenceStatus));
+      });
+    }
 
     return SafeArea(
       child: Padding(
@@ -687,6 +702,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   : 'Conversation: waiting for secure channel',
                       style: theme.textTheme.labelLarge,
                     ),
+                    if (peerSession.remotePresenceStatus != null &&
+                        peerSession.remotePresenceStatus !=
+                            PeerPresenceStatus.hidden) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Peer status: ${peerSession.remotePresenceStatus!.label}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       controller: _composerController,
@@ -1004,6 +1028,15 @@ class _PeerSessionCard extends StatelessWidget {
                   ),
                 if (sessionState.remoteFingerprint != null)
                   Chip(label: Text(sessionState.remoteFingerprint!)),
+                if (sessionState.remotePresenceStatus != null)
+                  Chip(
+                    label: Text(
+                      sessionState.remotePresenceStatus ==
+                              PeerPresenceStatus.hidden
+                          ? 'Presence hidden'
+                          : sessionState.remotePresenceStatus!.label,
+                    ),
+                  ),
                 if (sessionState.pendingRemoteIceCount > 0)
                   Chip(
                     label: Text(

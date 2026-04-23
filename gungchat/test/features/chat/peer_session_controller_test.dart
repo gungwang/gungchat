@@ -3,6 +3,7 @@ import 'dart:typed_data';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gungchat/core/encryption/crypto_service.dart';
+import 'package:gungchat/features/chat/presence_status.dart';
 import 'package:gungchat/features/chat/peer_session_controller.dart';
 import 'package:gungchat/models/message.dart';
 
@@ -71,6 +72,25 @@ void main() {
       expect(decoded.receiptState, MessageDeliveryState.delivered);
       expect(decoded.payload, isNull);
       expect(decoded.isTyping, isNull);
+    });
+
+    test('round-trips presence envelopes', () {
+      final envelope = PeerTransportEnvelope.presence(
+        senderFingerprint: '12:34:56:78',
+        createdAt: DateTime.utc(2025, 1, 2, 3, 4, 5),
+        presenceStatus: PeerPresenceStatus.away,
+      );
+
+      final decoded = PeerTransportEnvelope.decodeTransportString(
+        envelope.encodeTransportString(),
+      );
+
+      expect(decoded.kind, PeerTransportEnvelopeKind.presence);
+      expect(decoded.senderFingerprint, '12:34:56:78');
+      expect(decoded.presenceStatus, PeerPresenceStatus.away);
+      expect(decoded.payload, isNull);
+      expect(decoded.isTyping, isNull);
+      expect(decoded.receiptState, isNull);
     });
 
     test('round-trips read receipt envelopes', () {
