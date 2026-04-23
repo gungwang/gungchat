@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -9,6 +11,8 @@ import '../../core/networking/webrtc_manager.dart';
 import '../../models/contact.dart';
 import '../../models/message.dart';
 import '../contacts/discovery_service.dart';
+import 'peer_connect_intent.dart';
+import 'peer_invitation_builder.dart';
 import 'peer_session_controller.dart';
 import 'widgets/message_bubble.dart';
 
@@ -103,8 +107,58 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _consumeConnectIntent(PeerConnectIntent intent) async {
+    ref.read(pendingPeerConnectIntentProvider.notifier).state = null;
+
+    Contact? contact;
+    for (final candidate in ref.read(contactBookProvider)) {
+      if (candidate.fingerprint == intent.fingerprint) {
+        contact = candidate;
+        break;
+      }
+    }
+
+    if (contact == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Could not find that contact to start a connection.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    ref.read(selectedContactFingerprintProvider.notifier).state =
+        contact.fingerprint;
+
+    if (intent.autoStartOffer) {
+      await ref
+          .read(peerSessionControllerProvider.notifier)
+          .startOffer(targetContact: contact);
+    }
+
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Connect flow prepared for ${contact.displayName}. Copy the invite once the offer is ready.',
+          ),
+        ),
+      );
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<PeerConnectIntent?>(pendingPeerConnectIntentProvider,
+        (previous, next) {
+      if (next == null) {
+        return;
+      }
+      unawaited(_consumeConnectIntent(next));
+    });
+
     final theme = Theme.of(context);
     final identityAsync = ref.watch(deviceIdentityProvider);
     final networkAsync = ref.watch(networkStatusProvider);
@@ -136,6 +190,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   DiscoveryService.discoveryPort,
               fingerprint: selectedContact.fingerprint,
             );
+    final invitationDraft = selectedContact == null
+        ? null
+        : ref.read(peerInvitationBuilderProvider).build(
+              contact: selectedContact,
+              sessionState: peerSession,
+              manualUri: selectedUri?.toString(),
+            );
 
     return SafeArea(
       child: Padding(
@@ -165,15 +226,27 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onClearSelection: () {
                 ref.read(selectedContactFingerprintProvider.notifier).state =
                     null;
+                ref.read(pendingPeerConnectIntentProvider.notifier).state =
+                    null;
               },
               onCopyUri: selectedUri == null
                   ? null
                   : () => _copyText('Manual URI', selectedUri.toString()),
+              onConnect: selectedContact == null
+                  ? null
+                  : () {
+                      ref
+                          .read(pendingPeerConnectIntentProvider.notifier)
+                          .state = PeerConnectIntent(
+                        fingerprint: selectedContact.fingerprint,
+                      );
+                    },
             ),
             const SizedBox(height: 12),
             _PeerSessionCard(
               sessionState: peerSession,
               selectedContact: selectedContact,
+              invitationDraft: invitationDraft,
               signalController: _signalController,
               onStartOffer: () async {
                 await ref
@@ -204,6 +277,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   _signalController.clear();
                 }
               },
+              onConnect: selectedContact == null
+                  ? null
+                  : () async {
+                      ref
+                          .read(pendingPeerConnectIntentProvider.notifier)
+                          .state = PeerConnectIntent(
+                        fingerprint: selectedContact.fingerprint,
+                      );
+                    },
+              onCopyInvitation: invitationDraft == null ||
+                      !invitationDraft.hasOffer
+                  ? null
+                  : () => _copyText(
+                        'Connection invite',
+                        invitationDraft.clipboardText,
+                      ),
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -353,6 +442,7 @@ class _ContactTargetCard extends StatelessWidget {
     required this.selectedContact,
     required this.onSelectContact,
     required this.onClearSelection,
+    required this.onConnect,
     this.selectedUri,
     this.onCopyUri,
   });
@@ -361,6 +451,7 @@ class _ContactTargetCard extends StatelessWidget {
   final Contact? selectedContact;
   final ValueChanged<String> onSelectContact;
   final VoidCallback onClearSelection;
+  final VoidCallback? onConnect;
   final String? selectedUri;
   final VoidCallback? onCopyUri;
 
@@ -415,6 +506,11 @@ class _ContactTargetCard extends StatelessWidget {
                     icon: const Icon(Icons.clear_outlined),
                     label: const Text('Clear'),
                   ),
+                  FilledButton.icon(
+                    onPressed: onConnect,
+                    icon: const Icon(Icons.wifi_tethering_outlined),
+                    label: const Text('Connect'),
+                  ),
                 ],
               ),
             ],
@@ -432,6 +528,9 @@ class _PeerSessionCard extends StatelessWidget {
     required this.onStartOffer,
     required this.onApplySignal,
     required this.onReset,
+    this.onConnect,
+    this.onCopyInvitation,
+    this.invitationDraft,
     this.selectedContact,
   });
 
@@ -441,6 +540,9 @@ class _PeerSessionCard extends StatelessWidget {
   final Future<void> Function() onStartOffer;
   final Future<void> Function() onApplySignal;
   final Future<void> Function() onReset;
+  final Future<void> Function()? onConnect;
+  final VoidCallback? onCopyInvitation;
+  final PeerInvitationDraft? invitationDraft;
 
   @override
   Widget build(BuildContext context) {
@@ -456,6 +558,61 @@ class _PeerSessionCard extends StatelessWidget {
         subtitle: Text(_subtitleForState(sessionState, selectedContact)),
         trailing: _StateChip(state: sessionState),
         children: [
+          if (selectedContact != null && invitationDraft != null) ...[
+            DecoratedBox(
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(12),
+                color: theme.colorScheme.surfaceContainerHighest,
+              ),
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      invitationDraft!.title,
+                      style: theme.textTheme.titleSmall,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(invitationDraft!.status),
+                    const SizedBox(height: 10),
+                    for (var index = 0;
+                        index < invitationDraft!.steps.length;
+                        index++)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 4),
+                        child: Text(
+                          '${index + 1}. ${invitationDraft!.steps[index]}',
+                        ),
+                      ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        FilledButton.icon(
+                          onPressed: onConnect,
+                          icon: const Icon(Icons.wifi_tethering_outlined),
+                          label: Text(
+                            invitationDraft!.hasOffer
+                                ? 'Refresh Offer'
+                                : 'Connect',
+                          ),
+                        ),
+                        if (onCopyInvitation != null)
+                          FilledButton.tonalIcon(
+                            onPressed: onCopyInvitation,
+                            icon: const Icon(Icons.copy_all_outlined),
+                            label: const Text('Copy Invite'),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
           Align(
             alignment: Alignment.centerLeft,
             child: Wrap(
@@ -491,7 +648,7 @@ class _PeerSessionCard extends StatelessWidget {
             maxLines: 5,
             minLines: 3,
             decoration: const InputDecoration(
-              labelText: 'Paste remote offer, answer, or ICE payload',
+              labelText: 'Paste remote answer, offer, or ICE payload',
               border: OutlineInputBorder(),
             ),
           ),
@@ -502,7 +659,9 @@ class _PeerSessionCard extends StatelessWidget {
                 child: FilledButton.icon(
                   onPressed: onStartOffer,
                   icon: const Icon(Icons.outbox_outlined),
-                  label: const Text('Start Offer'),
+                  label: Text(
+                    selectedContact == null ? 'Start Offer' : 'New Offer',
+                  ),
                 ),
               ),
               const SizedBox(width: 12),
@@ -564,7 +723,7 @@ class _PeerSessionCard extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Signals to share',
+                'Advanced signals',
                 style: theme.textTheme.titleSmall,
               ),
             ),
@@ -598,7 +757,7 @@ class _PeerSessionCard extends StatelessWidget {
       return 'Exchange offer, answer, and ICE payloads';
     }
     if (selectedContact != null) {
-      return 'Selected ${selectedContact.displayName}. Start an offer or answer their signal.';
+      return 'Selected ${selectedContact.displayName}. Connect to generate an offer and a ready-to-send invite.';
     }
     return 'Select a contact or paste a remote offer to answer manually';
   }
