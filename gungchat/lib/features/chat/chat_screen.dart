@@ -47,6 +47,66 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _copyInvitationDraft(
+    PeerInvitationDraft draft,
+    Contact? selectedContact,
+  ) async {
+    await _copyText(draft.copyActionLabel, draft.clipboardText);
+    ref.read(peerSessionControllerProvider.notifier).recordHistory(
+          title: draft.kind == PeerInvitationDraftKind.reply
+              ? 'Reply copied'
+              : 'Invite copied',
+          detail: selectedContact == null
+              ? 'Clipboard bundle is ready to send.'
+              : 'Clipboard bundle is ready for ${selectedContact.displayName}.',
+          direction: PeerSessionHistoryDirection.outgoing,
+          action: PeerSessionHistoryAction(
+            kind: PeerSessionHistoryActionKind.copy,
+            label: draft.kind == PeerInvitationDraftKind.reply
+                ? 'Copy Reply Again'
+                : 'Copy Invite Again',
+            payload: draft.clipboardText,
+          ),
+        );
+  }
+
+  Future<void> _copyInvitationLink(
+    Uri invitationLink,
+    PeerInvitationDraft draft,
+  ) async {
+    await _copyText('Deep link', invitationLink.toString());
+    ref.read(peerSessionControllerProvider.notifier).recordHistory(
+          title: draft.kind == PeerInvitationDraftKind.reply
+              ? 'Reply link copied'
+              : 'Invite link copied',
+          detail: 'Ready to reopen in GungChat on the peer device.',
+          direction: PeerSessionHistoryDirection.outgoing,
+          action: PeerSessionHistoryAction(
+            kind: PeerSessionHistoryActionKind.copy,
+            label: 'Copy Link Again',
+            payload: invitationLink.toString(),
+          ),
+        );
+  }
+
+  Future<void> _handleHistoryAction(PeerSessionHistoryAction action) async {
+    switch (action.kind) {
+      case PeerSessionHistoryActionKind.copy:
+        await Clipboard.setData(ClipboardData(text: action.payload));
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Timeline entry copied.')),
+          );
+        }
+      case PeerSessionHistoryActionKind.apply:
+        _signalController.text = action.payload;
+        await _applyImportedTextValue(
+          action.payload,
+          selectedContact: ref.read(selectedContactProvider),
+        );
+    }
+  }
+
   Future<void> _sendMessage(
       DeviceIdentity identity, Contact? selectedContact) async {
     final text = _composerController.text.trim();
@@ -107,6 +167,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         });
       }
     }
+  }
+
+  String _typingPeerLabel(
+    PeerSessionState sessionState,
+    Contact? selectedContact,
+  ) {
+    final remoteFingerprint = sessionState.remoteFingerprint;
+    if (selectedContact != null &&
+        (remoteFingerprint == null ||
+            selectedContact.fingerprint == remoteFingerprint ||
+            conversationIdForFingerprint(selectedContact.fingerprint) ==
+                sessionState.conversationId)) {
+      return selectedContact.displayName;
+    }
+
+    return remoteFingerprint ?? 'Peer';
   }
 
   Future<void> _consumeConnectIntent(PeerConnectIntent intent) async {
@@ -413,10 +489,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             );
     final invitationLink = invitationDraft == null ||
         !invitationDraft.hasReadyBundle
-      ? null
-      : ref
-        .read(peerDeepLinkServiceProvider)
-        .buildInputUri(invitationDraft.clipboardText);
+        ? null
+        : ref
+            .read(peerDeepLinkServiceProvider)
+            .buildInputUri(invitationDraft.clipboardText);
 
     return SafeArea(
       child: Padding(
@@ -496,14 +572,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onCopyInvitation: invitationDraft == null ||
                       !invitationDraft.hasReadyBundle
                   ? null
-                  : () => _copyText(
-                        invitationDraft.copyActionLabel,
-                        invitationDraft.clipboardText,
+                  : () => _copyInvitationDraft(
+                        invitationDraft,
+                        selectedContact,
                       ),
-                onCopyLink: invitationLink == null
+              onCopyLink: invitationLink == null || invitationDraft == null
                   ? null
-                  : () => _copyText('Deep link', invitationLink.toString()),
-                onPasteInvite: _pasteInviteFromClipboard,
+                  : () => _copyInvitationLink(
+                        invitationLink,
+                        invitationDraft,
+                      ),
+              onPasteInvite: _pasteInviteFromClipboard,
+              onHistoryAction: _handleHistoryAction,
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -565,6 +645,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       maxLines: 3,
                       minLines: 1,
                       enabled: composerEnabled,
+                      onChanged: canSendSecure
+                          ? (value) {
+                              ref
+                                  .read(peerSessionControllerProvider.notifier)
+                                  .updateComposerActivity(value);
+                            }
+                          : null,
                       textInputAction: TextInputAction.send,
                       onSubmitted: identityAsync.asData == null ||
                               _sending ||
@@ -588,6 +675,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         border: const OutlineInputBorder(),
                       ),
                     ),
+                    if (peerSession.isRemoteTyping) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        '${_typingPeerLabel(peerSession, selectedContact)} is typing...',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: theme.colorScheme.primary,
+                        ),
+                      ),
+                    ],
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       value: _burnAfterRead,
@@ -740,6 +836,7 @@ class _PeerSessionCard extends StatelessWidget {
     required this.onApplySignal,
     required this.onReset,
     required this.onPasteInvite,
+    required this.onHistoryAction,
     this.onConnect,
     this.onCopyInvitation,
     this.onCopyLink,
@@ -754,6 +851,7 @@ class _PeerSessionCard extends StatelessWidget {
   final Future<void> Function() onApplySignal;
   final Future<void> Function() onReset;
   final Future<void> Function() onPasteInvite;
+  final Future<void> Function(PeerSessionHistoryAction action) onHistoryAction;
   final Future<void> Function()? onConnect;
   final VoidCallback? onCopyInvitation;
   final VoidCallback? onCopyLink;
@@ -995,7 +1093,10 @@ class _PeerSessionCard extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox(height: 8),
                 itemBuilder: (context, index) {
                   final entry = sessionState.history[index];
-                  return _HistoryTile(entry: entry);
+                  return _HistoryTile(
+                    entry: entry,
+                    onAction: onHistoryAction,
+                  );
                 },
               ),
             ),
@@ -1080,9 +1181,13 @@ class _SignalTile extends StatelessWidget {
 }
 
 class _HistoryTile extends StatelessWidget {
-  const _HistoryTile({required this.entry});
+  const _HistoryTile({
+    required this.entry,
+    required this.onAction,
+  });
 
   final PeerSessionHistoryEntry entry;
+  final Future<void> Function(PeerSessionHistoryAction action) onAction;
 
   @override
   Widget build(BuildContext context) {
@@ -1102,13 +1207,50 @@ class _HistoryTile extends StatelessWidget {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: theme.colorScheme.outlineVariant),
       ),
-      child: ListTile(
-        dense: true,
-        leading: Icon(icon),
-        title: Text(entry.title),
-        subtitle: entry.detail == null
-            ? Text(timeLabel)
-            : Text('${entry.detail}\n$timeLabel'),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(entry.title, style: theme.textTheme.titleSmall),
+                      const SizedBox(height: 4),
+                      Text(
+                        entry.detail == null
+                            ? timeLabel
+                            : '${entry.detail}\n$timeLabel',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (entry.action != null) ...[
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: () async {
+                  await onAction(entry.action!);
+                },
+                icon: Icon(
+                  entry.action!.kind == PeerSessionHistoryActionKind.copy
+                      ? Icons.copy_all_outlined
+                      : Icons.replay_outlined,
+                  size: 18,
+                ),
+                label: Text(entry.action!.label),
+              ),
+            ],
+          ],
+        ),
       ),
     );
   }
