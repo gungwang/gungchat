@@ -4,6 +4,7 @@ import 'dart:typed_data';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:gungchat/core/encryption/crypto_service.dart';
 import 'package:gungchat/features/chat/peer_session_controller.dart';
+import 'package:gungchat/models/message.dart';
 
 void main() {
   group('PeerTransportEnvelope', () {
@@ -50,6 +51,26 @@ void main() {
       expect(decoded.isTyping, isTrue);
       expect(decoded.messageId, isNull);
       expect(decoded.payload, isNull);
+    });
+
+    test('round-trips delivery receipt envelopes', () {
+      final envelope = PeerTransportEnvelope.receipt(
+        messageId: 'message-2',
+        senderFingerprint: '55:66:77:88',
+        createdAt: DateTime.utc(2025, 1, 2, 3, 4, 5),
+        receiptState: MessageDeliveryState.delivered,
+      );
+
+      final decoded = PeerTransportEnvelope.decodeTransportString(
+        envelope.encodeTransportString(),
+      );
+
+      expect(decoded.kind, PeerTransportEnvelopeKind.receipt);
+      expect(decoded.messageId, 'message-2');
+      expect(decoded.senderFingerprint, '55:66:77:88');
+      expect(decoded.receiptState, MessageDeliveryState.delivered);
+      expect(decoded.payload, isNull);
+      expect(decoded.isTyping, isNull);
     });
 
     test('decodes legacy message envelopes without kind', () {

@@ -694,6 +694,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         _handleRemoteTypingEnvelope(envelope);
         return;
       }
+      if (envelope.kind == PeerTransportEnvelopeKind.receipt) {
+        await _handleReceiptEnvelope(envelope);
+        return;
+      }
 
       final payload = envelope.payload;
       final messageId = envelope.messageId;
@@ -731,6 +735,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
           expiresAt: envelope.expiresAt,
         ),
       );
+      await _sendDeliveryReceipt(messageId);
       _refreshConversation(conversationId);
 
       state = state.copyWith(
@@ -876,6 +881,32 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     });
   }
 
+  Future<void> _handleReceiptEnvelope(PeerTransportEnvelope envelope) async {
+    final messageId = envelope.messageId;
+    final receiptState = envelope.receiptState;
+    if (messageId == null || receiptState == null) {
+      throw const FormatException(
+        'Incoming delivery receipt is missing receipt metadata.',
+      );
+    }
+
+    final conversationId = state.conversationId ??
+        conversationIdForFingerprint(envelope.senderFingerprint);
+    final messageService = await _loadMessageService();
+    await messageService.updateDeliveryState(messageId, receiptState);
+    _refreshConversation(conversationId);
+
+    state = state.copyWith(
+      remoteFingerprint: envelope.senderFingerprint,
+      conversationId: conversationId,
+      lastEvent: switch (receiptState) {
+        MessageDeliveryState.read => 'Peer read a secure message.',
+        MessageDeliveryState.delivered => 'Peer received a secure message.',
+        _ => 'Peer confirmed a secure message update.',
+      },
+    );
+  }
+
   Future<void> _sendTypingStatus(bool isTyping) async {
     if (!state.isTransportReady) {
       _localTypingActive = false;
@@ -896,6 +927,27 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     } catch (error, stackTrace) {
       _localTypingActive = false;
       debugPrint('Typing update failed: $error\n$stackTrace');
+    }
+  }
+
+  Future<void> _sendDeliveryReceipt(String messageId) async {
+    if (!state.isTransportReady) {
+      return;
+    }
+
+    final identity = await _ensureLocalIdentity();
+
+    try {
+      await _webRtcManager.sendText(
+        PeerTransportEnvelope.receipt(
+          messageId: messageId,
+          senderFingerprint: identity.fingerprint,
+          createdAt: DateTime.now(),
+          receiptState: MessageDeliveryState.delivered,
+        ).encodeTransportString(),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Delivery receipt failed: $error\n$stackTrace');
     }
   }
 
@@ -961,6 +1013,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
 enum PeerTransportEnvelopeKind {
   message,
   typing,
+  receipt,
 }
 
 @immutable
@@ -973,14 +1026,27 @@ class PeerTransportEnvelope {
     required this.burnAfterRead,
     this.expiresAt,
   })  : kind = PeerTransportEnvelopeKind.message,
-        isTyping = null;
+        isTyping = null,
+        receiptState = null;
 
   const PeerTransportEnvelope.typing({
     required this.senderFingerprint,
     required this.createdAt,
     required this.isTyping,
   })  : kind = PeerTransportEnvelopeKind.typing,
+        receiptState = null,
         messageId = null,
+        payload = null,
+        burnAfterRead = null,
+        expiresAt = null;
+
+  const PeerTransportEnvelope.receipt({
+    required this.messageId,
+    required this.senderFingerprint,
+    required this.createdAt,
+    required this.receiptState,
+  })  : kind = PeerTransportEnvelopeKind.receipt,
+        isTyping = null,
         payload = null,
         burnAfterRead = null,
         expiresAt = null;
@@ -993,6 +1059,7 @@ class PeerTransportEnvelope {
   final bool? burnAfterRead;
   final DateTime? expiresAt;
   final bool? isTyping;
+  final MessageDeliveryState? receiptState;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -1004,8 +1071,11 @@ class PeerTransportEnvelope {
         'payload': payload!.toJson(),
         'burnAfterRead': burnAfterRead,
         'expiresAt': expiresAt?.toIso8601String(),
-      } else ...<String, dynamic>{
+      } else if (kind == PeerTransportEnvelopeKind.typing) ...<String, dynamic>{
         'isTyping': isTyping,
+      } else ...<String, dynamic>{
+        'messageId': messageId,
+        'receiptState': receiptState!.name,
       },
     };
   }
@@ -1015,6 +1085,7 @@ class PeerTransportEnvelope {
   factory PeerTransportEnvelope.fromJson(Map<String, dynamic> json) {
     final kind = switch (json['kind'] as String?) {
       'typing' => PeerTransportEnvelopeKind.typing,
+      'receipt' => PeerTransportEnvelopeKind.receipt,
       _ => PeerTransportEnvelopeKind.message,
     };
 
@@ -1023,6 +1094,19 @@ class PeerTransportEnvelope {
         senderFingerprint: json['senderFingerprint'] as String,
         createdAt: DateTime.parse(json['createdAt'] as String),
         isTyping: json['isTyping'] as bool? ?? false,
+      );
+    }
+
+    if (kind == PeerTransportEnvelopeKind.receipt) {
+      return PeerTransportEnvelope.receipt(
+        messageId: json['messageId'] as String,
+        senderFingerprint: json['senderFingerprint'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        receiptState: json['receiptState'] == null
+            ? MessageDeliveryState.delivered
+            : MessageDeliveryState.values.byName(
+                json['receiptState'] as String,
+              ),
       );
     }
 
