@@ -3,10 +3,18 @@ import 'package:flutter/material.dart';
 import '../../../models/message.dart';
 
 class MessageBubble extends StatelessWidget {
-  const MessageBubble({super.key, required this.message, this.onReply});
+  const MessageBubble({
+    super.key,
+    required this.message,
+    this.onReply,
+    this.onQuotedMessageTap,
+    this.isHighlighted = false,
+  });
 
   final Message message;
   final VoidCallback? onReply;
+  final VoidCallback? onQuotedMessageTap;
+  final bool isHighlighted;
 
   @override
   Widget build(BuildContext context) {
@@ -17,45 +25,56 @@ class MessageBubble extends StatelessWidget {
         ? theme.colorScheme.primaryContainer
         : theme.colorScheme.surfaceContainerHighest;
     final replyPreview = _replyPreviewText();
-    final bubble = Container(
+    final bubble = AnimatedContainer(
+      duration: const Duration(milliseconds: 220),
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       constraints: const BoxConstraints(maxWidth: 420),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
+        border: isHighlighted
+            ? Border.all(
+                color: theme.colorScheme.primary,
+                width: 2,
+              )
+            : null,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           if (replyPreview != null) ...[
-            DecoratedBox(
-              decoration: BoxDecoration(
-                border: Border(
-                  left: BorderSide(
-                    color: theme.colorScheme.primary,
-                    width: 3,
+            GestureDetector(
+              behavior: HitTestBehavior.opaque,
+              onTap: onQuotedMessageTap,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  border: Border(
+                    left: BorderSide(
+                      color: theme.colorScheme.primary,
+                      width: 3,
+                    ),
                   ),
                 ),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.only(left: 10),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      'Quoted message',
-                      style: theme.textTheme.labelMedium,
-                    ),
-                    const SizedBox(height: 4),
-                    Text(
-                      replyPreview,
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ],
+                child: Padding(
+                  padding: const EdgeInsets.only(left: 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        'Quoted message',
+                        style: theme.textTheme.labelMedium,
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        replyPreview,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                  ),
                 ),
               ),
             ),

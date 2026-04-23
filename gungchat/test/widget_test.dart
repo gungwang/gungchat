@@ -39,6 +39,7 @@ void main() {
     WidgetTester tester,
   ) async {
     var replyInvoked = false;
+    var jumpInvoked = false;
     final message = Message(
       id: '2',
       conversationId: 'bootstrap',
@@ -62,6 +63,9 @@ void main() {
               onReply: () {
                 replyInvoked = true;
               },
+              onQuotedMessageTap: () {
+                jumpInvoked = true;
+              },
             ),
           ),
         ),
@@ -70,6 +74,11 @@ void main() {
 
     expect(find.text('Quoted message'), findsOneWidget);
     expect(find.text('earlier message body'), findsOneWidget);
+
+    await tester.tap(find.text('earlier message body'));
+    await tester.pump();
+
+    expect(jumpInvoked, isTrue);
 
     await tester.longPress(find.text('follow up message'));
     await tester.pump();
