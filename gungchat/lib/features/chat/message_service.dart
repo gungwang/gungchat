@@ -34,6 +34,8 @@ class MessageService {
     bool burnAfterRead = true,
     Duration? ttl,
     MessageDeliveryState deliveryState = MessageDeliveryState.local,
+    String? replyToMessageId,
+    String? replyToBody,
   }) async {
     final message = Message(
       id: _uuid.v4(),
@@ -49,6 +51,8 @@ class MessageService {
         burnAfterRead: burnAfterRead,
         explicitTtl: ttl,
       ),
+      replyToMessageId: replyToMessageId,
+      replyToBody: replyToBody,
     );
 
     await _messageDatabase.upsertMessage(message);

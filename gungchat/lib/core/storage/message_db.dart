@@ -17,7 +17,7 @@ class MessageDatabase {
 
     _database = await openDatabase(
       databasePath,
-      version: 1,
+      version: 2,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE messages(
@@ -30,9 +30,21 @@ class MessageDatabase {
             created_at TEXT NOT NULL,
             is_outgoing INTEGER NOT NULL,
             burn_after_read INTEGER NOT NULL,
-            expires_at TEXT
+            expires_at TEXT,
+            reply_to_message_id TEXT,
+            reply_to_body TEXT
           )
         ''');
+      },
+      onUpgrade: (database, oldVersion, newVersion) async {
+        if (oldVersion < 2) {
+          await database.execute(
+            'ALTER TABLE messages ADD COLUMN reply_to_message_id TEXT',
+          );
+          await database.execute(
+            'ALTER TABLE messages ADD COLUMN reply_to_body TEXT',
+          );
+        }
       },
     );
   }

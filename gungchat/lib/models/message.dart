@@ -28,6 +28,8 @@ class Message {
     required this.isOutgoing,
     this.burnAfterRead = true,
     this.expiresAt,
+    this.replyToMessageId,
+    this.replyToBody,
   });
 
   final String id;
@@ -40,8 +42,11 @@ class Message {
   final bool isOutgoing;
   final bool burnAfterRead;
   final DateTime? expiresAt;
+  final String? replyToMessageId;
+  final String? replyToBody;
 
   bool get isExpired => expiresAt != null && expiresAt!.isBefore(DateTime.now());
+  bool get hasReply => replyToBody != null && replyToBody!.trim().isNotEmpty;
 
   Message copyWith({
     String? id,
@@ -55,6 +60,9 @@ class Message {
     bool? burnAfterRead,
     DateTime? expiresAt,
     bool clearExpiresAt = false,
+    String? replyToMessageId,
+    String? replyToBody,
+    bool clearReplyTo = false,
   }) {
     return Message(
       id: id ?? this.id,
@@ -67,6 +75,9 @@ class Message {
       isOutgoing: isOutgoing ?? this.isOutgoing,
       burnAfterRead: burnAfterRead ?? this.burnAfterRead,
       expiresAt: clearExpiresAt ? null : expiresAt ?? this.expiresAt,
+      replyToMessageId:
+          clearReplyTo ? null : replyToMessageId ?? this.replyToMessageId,
+      replyToBody: clearReplyTo ? null : replyToBody ?? this.replyToBody,
     );
   }
 
@@ -82,6 +93,8 @@ class Message {
       'is_outgoing': isOutgoing ? 1 : 0,
       'burn_after_read': burnAfterRead ? 1 : 0,
       'expires_at': expiresAt?.toIso8601String(),
+      'reply_to_message_id': replyToMessageId,
+      'reply_to_body': replyToBody,
     };
   }
 
@@ -101,6 +114,8 @@ class Message {
       expiresAt: map['expires_at'] == null
           ? null
           : DateTime.parse(map['expires_at']! as String),
+      replyToMessageId: map['reply_to_message_id'] as String?,
+      replyToBody: map['reply_to_body'] as String?,
     );
   }
 }

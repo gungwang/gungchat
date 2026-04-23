@@ -16,6 +16,7 @@ import 'peer_connect_intent.dart';
 import 'peer_invitation_builder.dart';
 import 'peer_invitation_parser.dart';
 import 'peer_session_controller.dart';
+import 'presence_status.dart';
 import 'widgets/message_bubble.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -29,6 +30,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _composerController = TextEditingController();
   final TextEditingController _signalController = TextEditingController();
   final Set<String> _markingReadMessageIds = <String>{};
+  Message? _replyingToMessage;
   bool _burnAfterRead = true;
   bool _sending = false;
 
@@ -46,6 +48,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         SnackBar(content: Text('$label copied')),
       );
     }
+  }
+
+  void _startReply(Message message) {
+    setState(() {
+      _replyingToMessage = message;
+    });
+  }
+
+  void _clearReplyTarget() {
+    if (_replyingToMessage == null) {
+      return;
+    }
+
+    setState(() {
+      _replyingToMessage = null;
+    });
+  }
+
+  String _replyPreviewText(String body) {
+    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.length <= 96) {
+      return compact;
+    }
+    return '${compact.substring(0, 96)}...';
   }
 
   Future<void> _copyInvitationDraft(
@@ -139,7 +165,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _sendMessage(
-      DeviceIdentity identity, Contact? selectedContact) async {
+    DeviceIdentity identity,
+    Contact? selectedContact, {
+    Message? replyingToMessage,
+  }) async {
     final text = _composerController.text.trim();
     if (text.isEmpty || _sending) {
       return;
@@ -176,9 +205,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       if (peerSession.isTransportReady) {
         final sent = await ref
             .read(peerSessionControllerProvider.notifier)
-            .sendMessage(body: text, burnAfterRead: _burnAfterRead);
+            .sendMessage(
+              body: text,
+              burnAfterRead: _burnAfterRead,
+              replyToMessageId: replyingToMessage?.id,
+              replyToBody: replyingToMessage?.body,
+            );
         if (sent) {
           _composerController.clear();
+          _clearReplyTarget();
         }
       } else {
         final messageService = await ref.read(messageServiceProvider.future);
@@ -187,8 +222,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           senderId: identity.fingerprint,
           body: text,
           burnAfterRead: _burnAfterRead,
+          replyToMessageId: replyingToMessage?.id,
+          replyToBody: replyingToMessage?.body,
         );
         _composerController.clear();
+        _clearReplyTarget();
         ref.invalidate(conversationMessagesProvider(bootstrapConversationId));
       }
     } finally {
@@ -494,6 +532,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final activeConversationId = peerSession.conversationId ??
         selectedConversationId ??
         bootstrapConversationId;
+    final replyingToMessage = _replyingToMessage?.conversationId ==
+        activeConversationId
+      ? _replyingToMessage
+      : null;
 
     final messagesAsync = ref.watch(
       conversationMessagesProvider(activeConversationId),
@@ -556,6 +598,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     null;
                 ref.read(pendingPeerConnectIntentProvider.notifier).state =
                     null;
+                _clearReplyTarget();
               },
               onCopyUri: selectedUri == null
                   ? null
@@ -590,6 +633,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     .resetSession();
                 if (mounted) {
                   _signalController.clear();
+                  setState(() {
+                    _replyingToMessage = null;
+                  });
                 }
               },
               onConnect: selectedContact == null
@@ -687,6 +733,57 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   : 'Conversation: waiting for secure channel',
                       style: theme.textTheme.labelLarge,
                     ),
+                    if (peerSession.remotePresenceStatus != null &&
+                        peerSession.remotePresenceStatus !=
+                            PeerPresenceStatus.hidden) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Peer status: ${peerSession.remotePresenceStatus!.label}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                    if (replyingToMessage != null) ...[
+                      const SizedBox(height: 12),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: theme.colorScheme.surfaceContainerHighest,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      replyingToMessage.isOutgoing
+                                          ? 'Replying to yourself'
+                                          : 'Replying to peer',
+                                      style: theme.textTheme.labelLarge,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _replyPreviewText(replyingToMessage.body),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Cancel reply',
+                                onPressed: _clearReplyTarget,
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       controller: _composerController,
@@ -708,6 +805,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           : (_) => _sendMessage(
                                 identityAsync.requireValue,
                                 selectedContact,
+                              replyingToMessage: replyingToMessage,
                               ),
                       decoration: InputDecoration(
                         labelText: canSendSecure
@@ -758,6 +856,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             : () => _sendMessage(
                                   identityAsync.requireValue,
                                   selectedContact,
+                                  replyingToMessage: replyingToMessage,
                                 ),
                         icon: _sending
                             ? const SizedBox(
@@ -787,7 +886,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Widget _buildMessage(Message message) {
-    return MessageBubble(message: message);
+    return MessageBubble(
+      message: message,
+      onReply: message.type == MessageType.system
+          ? null
+          : () => _startReply(message),
+    );
   }
 }
 
@@ -1004,6 +1108,15 @@ class _PeerSessionCard extends StatelessWidget {
                   ),
                 if (sessionState.remoteFingerprint != null)
                   Chip(label: Text(sessionState.remoteFingerprint!)),
+                if (sessionState.remotePresenceStatus != null)
+                  Chip(
+                    label: Text(
+                      sessionState.remotePresenceStatus ==
+                              PeerPresenceStatus.hidden
+                          ? 'Presence hidden'
+                          : sessionState.remotePresenceStatus!.label,
+                    ),
+                  ),
                 if (sessionState.pendingRemoteIceCount > 0)
                   Chip(
                     label: Text(

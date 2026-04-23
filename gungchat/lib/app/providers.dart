@@ -17,11 +17,13 @@ import '../features/chat/peer_deep_link_service.dart';
 import '../features/chat/peer_invitation_builder.dart';
 import '../features/chat/peer_invitation_parser.dart';
 import '../features/chat/message_service.dart';
+import '../features/chat/presence_status.dart';
 import '../features/chat/peer_session_controller.dart';
 import '../features/contacts/contact_book_controller.dart';
 import '../features/contacts/contact_book_storage.dart';
 import '../features/contacts/contact_exchange_service.dart';
 import '../features/contacts/discovery_service.dart';
+import '../features/settings/presence_preferences.dart';
 import '../features/settings/read_receipt_preferences.dart';
 import '../models/contact.dart';
 import '../models/message.dart';
@@ -40,10 +42,29 @@ final readReceiptPreferencesStorageProvider =
     Provider<ReadReceiptPreferencesStorage>((ref) {
   return const ReadReceiptPreferencesStorage();
 });
+final presencePreferencesStorageProvider =
+    Provider<PresencePreferencesStorage>((ref) {
+  return const PresencePreferencesStorage();
+});
 final readReceiptsEnabledProvider =
     StateNotifierProvider<ReadReceiptsPreferenceController, bool>((ref) {
   return ReadReceiptsPreferenceController(
     storage: ref.watch(readReceiptPreferencesStorageProvider),
+  );
+});
+final localPresenceStatusProvider =
+    StateNotifierProvider<PresencePreferenceController, PeerPresenceStatus>(
+        (ref) {
+  return PresencePreferenceController(
+    storage: ref.watch(presencePreferencesStorageProvider),
+  );
+});
+final appLifecycleStateProvider =
+    StateProvider<AppLifecycleState>((ref) => AppLifecycleState.resumed);
+final effectivePresenceStatusProvider = Provider<PeerPresenceStatus>((ref) {
+  return resolveEffectivePresenceStatus(
+    preferredStatus: ref.watch(localPresenceStatusProvider),
+    lifecycleState: ref.watch(appLifecycleStateProvider),
   );
 });
 

@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
+import '../chat/presence_status.dart';
 
 class SettingsScreen extends ConsumerWidget {
   const SettingsScreen({super.key});
@@ -12,6 +13,7 @@ class SettingsScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
     final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
+    final localPresenceStatus = ref.watch(localPresenceStatusProvider);
 
     return SafeArea(
       child: ListView(
@@ -81,6 +83,51 @@ class SettingsScreen extends ConsumerWidget {
               title: const Text('Read receipts'),
               subtitle: const Text(
                 'Opt in to send encrypted read confirmations when you open a conversation and view delivered messages.',
+              ),
+            ),
+          ),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Presence status',
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<PeerPresenceStatus>(
+                    initialValue: localPresenceStatus,
+                    decoration: const InputDecoration(
+                      border: OutlineInputBorder(),
+                      labelText: 'Shared presence',
+                    ),
+                    items: PeerPresenceStatus.values
+                        .map(
+                          (status) => DropdownMenuItem(
+                            value: status,
+                            child: Text(status.label),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+
+                      unawaited(
+                        ref
+                            .read(localPresenceStatusProvider.notifier)
+                            .setStatus(value),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Online is shared while the app is in the foreground and automatically falls back to Away in the background. Hidden suppresses your presence updates.',
+                  ),
+                ],
               ),
             ),
           ),
