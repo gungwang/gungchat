@@ -1,9 +1,14 @@
-Rocket.Chat/
-chatwoot/
-lets-chat/
-zulip/
+Rocket.Chat
+chatwoot
+lets-chat
+zulip
 
-hatwoot/*
+REF-CHAT-APPS
+REF-CHAT-APPS/*
+
+chatwoot/*
 lets-chat/*
 Rocket.Chat/*
 zulip/*
+
+.codex

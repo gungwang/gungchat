@@ -33,7 +33,8 @@ class WebRtcManager {
     required void Function(String message) onMessage,
     void Function(RTCIceCandidate candidate)? onIceCandidate,
   }) async {
-    _peerConnection = await createPeerConnection(_iceManager.buildConfiguration());
+    _peerConnection =
+        await createPeerConnection(_iceManager.buildConfiguration());
     _stateController.add(WebRtcSessionState.connecting);
 
     _peerConnection!
@@ -81,11 +82,11 @@ class WebRtcManager {
     await _peerConnection!.addCandidate(candidate);
   }
 
-  void sendText(String message) {
+  Future<void> sendText(String message) async {
     if (!isOpen) {
-      return;
+      throw StateError('RTC data channel is not open.');
     }
-    _dataChannel!.send(RTCDataChannelMessage(message));
+    await _dataChannel!.send(RTCDataChannelMessage(message));
   }
 
   Future<void> close() async {

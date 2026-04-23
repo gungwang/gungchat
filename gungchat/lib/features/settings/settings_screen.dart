@@ -22,7 +22,8 @@ class SettingsScreen extends ConsumerWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Appearance', style: Theme.of(context).textTheme.titleMedium),
+                  Text('Appearance',
+                      style: Theme.of(context).textTheme.titleMedium),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<ThemeMode>(
                     initialValue: themeMode,
@@ -60,7 +61,7 @@ class SettingsScreen extends ConsumerWidget {
               onChanged: null,
               title: const Text('Screenshot protection'),
               subtitle: const Text(
-                'Phase 2 will wire platform flags such as secure windows and recording detection hooks.',
+                'Android now enables secure windows. iOS and desktop recording detection still need platform-specific follow-up.',
               ),
             ),
           ),
@@ -79,7 +80,7 @@ class SettingsScreen extends ConsumerWidget {
               leading: const Icon(Icons.shield_outlined),
               title: const Text('Anti-surveillance guard'),
               subtitle: const Text(
-                'Capability reporting is stubbed now. Actual recording prevention is platform-specific and will follow after the base transport is stable.',
+                'Transport is in place. Next platform work is expanding recording detection and privacy guard behavior beyond Android secure windows.',
               ),
             ),
           ),
