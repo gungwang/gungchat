@@ -28,6 +28,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _composerController = TextEditingController();
   final TextEditingController _signalController = TextEditingController();
+  final Set<String> _markingReadMessageIds = <String>{};
   bool _burnAfterRead = true;
   bool _sending = false;
 
@@ -104,6 +105,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           action.payload,
           selectedContact: ref.read(selectedContactProvider),
         );
+    }
+  }
+
+  Future<void> _markVisibleMessagesRead({
+    required String conversationId,
+    required List<Message> messages,
+    required bool sendReceipt,
+  }) async {
+    final unreadIncomingIds = messages
+        .where(
+          (message) =>
+              !message.isOutgoing &&
+              message.deliveryState == MessageDeliveryState.delivered &&
+              !_markingReadMessageIds.contains(message.id),
+        )
+        .map((message) => message.id)
+        .toList(growable: false);
+    if (unreadIncomingIds.isEmpty) {
+      return;
+    }
+
+    _markingReadMessageIds.addAll(unreadIncomingIds);
+    try {
+      await ref.read(peerSessionControllerProvider.notifier).markMessagesRead(
+            conversationId: conversationId,
+            messageIds: unreadIncomingIds,
+            sendReceipt: sendReceipt,
+          );
+    } finally {
+      _markingReadMessageIds.removeAll(unreadIncomingIds);
     }
   }
 
@@ -455,6 +486,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final peerSession = ref.watch(peerSessionControllerProvider);
     final savedContacts = ref.watch(contactBookProvider);
     final selectedContact = ref.watch(selectedContactProvider);
+    final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
 
     final selectedConversationId = selectedContact == null
         ? null
@@ -592,6 +624,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   padding: const EdgeInsets.all(12),
                   child: messagesAsync.when(
                     data: (messages) {
+                      if (activeConversationId != bootstrapConversationId) {
+                        WidgetsBinding.instance.addPostFrameCallback((_) {
+                          if (!mounted) {
+                            return;
+                          }
+                          unawaited(
+                            _markVisibleMessagesRead(
+                              conversationId: activeConversationId,
+                              messages: messages,
+                              sendReceipt:
+                                  readReceiptsEnabled && peerSession.isTransportReady,
+                            ),
+                          );
+                        });
+                      }
+
                       if (messages.isEmpty) {
                         return Center(
                           child: Text(

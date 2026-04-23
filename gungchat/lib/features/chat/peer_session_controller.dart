@@ -382,6 +382,30 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     state = const PeerSessionState();
   }
 
+  Future<void> markMessagesRead({
+    required String conversationId,
+    required Iterable<String> messageIds,
+    required bool sendReceipt,
+  }) async {
+    final distinctIds = messageIds.toSet().toList(growable: false);
+    if (distinctIds.isEmpty) {
+      return;
+    }
+
+    final messageService = await _loadMessageService();
+    for (final messageId in distinctIds) {
+      await messageService.updateDeliveryState(
+        messageId,
+        MessageDeliveryState.read,
+      );
+      if (sendReceipt) {
+        await _sendReadReceipt(messageId);
+      }
+    }
+
+    _refreshConversation(conversationId);
+  }
+
   void updateComposerActivity(String draft) {
     final shouldNotifyTyping =
         state.isTransportReady && draft.trim().isNotEmpty;
@@ -931,6 +955,23 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   }
 
   Future<void> _sendDeliveryReceipt(String messageId) async {
+    await _sendReceipt(
+      messageId: messageId,
+      receiptState: MessageDeliveryState.delivered,
+    );
+  }
+
+  Future<void> _sendReadReceipt(String messageId) async {
+    await _sendReceipt(
+      messageId: messageId,
+      receiptState: MessageDeliveryState.read,
+    );
+  }
+
+  Future<void> _sendReceipt({
+    required String messageId,
+    required MessageDeliveryState receiptState,
+  }) async {
     if (!state.isTransportReady) {
       return;
     }
@@ -943,11 +984,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
           messageId: messageId,
           senderFingerprint: identity.fingerprint,
           createdAt: DateTime.now(),
-          receiptState: MessageDeliveryState.delivered,
+          receiptState: receiptState,
         ).encodeTransportString(),
       );
     } catch (error, stackTrace) {
-      debugPrint('Delivery receipt failed: $error\n$stackTrace');
+      debugPrint('Receipt send failed: $error\n$stackTrace');
     }
   }
 

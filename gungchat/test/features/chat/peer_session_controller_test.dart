@@ -73,6 +73,23 @@ void main() {
       expect(decoded.isTyping, isNull);
     });
 
+    test('round-trips read receipt envelopes', () {
+      final envelope = PeerTransportEnvelope.receipt(
+        messageId: 'message-3',
+        senderFingerprint: '99:aa:bb:cc',
+        createdAt: DateTime.utc(2025, 1, 2, 3, 4, 5),
+        receiptState: MessageDeliveryState.read,
+      );
+
+      final decoded = PeerTransportEnvelope.decodeTransportString(
+        envelope.encodeTransportString(),
+      );
+
+      expect(decoded.kind, PeerTransportEnvelopeKind.receipt);
+      expect(decoded.messageId, 'message-3');
+      expect(decoded.receiptState, MessageDeliveryState.read);
+    });
+
     test('decodes legacy message envelopes without kind', () {
       final legacyJson = jsonEncode({
         'messageId': 'legacy-message',
