@@ -11,6 +11,7 @@ import '../../core/networking/webrtc_manager.dart';
 import '../../models/contact.dart';
 import '../../models/message.dart';
 import '../contacts/discovery_service.dart';
+import 'pending_peer_input.dart';
 import 'peer_connect_intent.dart';
 import 'peer_invitation_builder.dart';
 import 'peer_invitation_parser.dart';
@@ -151,9 +152,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   Future<void> _applyImportedText(Contact? selectedContact) async {
-    final rawValue = _signalController.text.trim();
+    await _applyImportedTextValue(
+      _signalController.text.trim(),
+      selectedContact: selectedContact,
+    );
+  }
+
+  Future<void> _applyImportedTextValue(
+    String rawValue, {
+    required Contact? selectedContact,
+    PeerInputSource? source,
+  }) async {
     if (rawValue.isEmpty) {
       return;
+    }
+
+    final maybeUri = Uri.tryParse(rawValue);
+    if (maybeUri != null) {
+      final resolvedDeepLink =
+          ref.read(peerDeepLinkServiceProvider).resolve(maybeUri);
+      if (resolvedDeepLink != null) {
+        await _applyImportedTextValue(
+          resolvedDeepLink.rawInput,
+          selectedContact: selectedContact,
+          source: PeerInputSource.deepLink,
+        );
+        return;
+      }
     }
 
     final parser = ref.read(peerInvitationParserProvider);
@@ -170,6 +195,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             rawValue,
             targetContact: selectedContact,
           );
+      if (ref.read(peerSessionControllerProvider).lastError == null) {
+        ref.read(peerSessionControllerProvider.notifier).recordHistory(
+              title: 'Raw signal imported',
+              detail: source == null
+                  ? 'Applied from the chat input field.'
+                  : 'Applied from ${_sourceLabel(source)}.',
+              direction: PeerSessionHistoryDirection.incoming,
+            );
+      }
       if (mounted &&
           ref.read(peerSessionControllerProvider).lastError == null) {
         _signalController.clear();
@@ -212,6 +246,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
         }
 
+        if (ref.read(peerSessionControllerProvider).lastError == null) {
+          controller.recordHistory(
+            title: 'Invite imported',
+            detail: source == null
+                ? 'Offer bundle applied from the chat input field.'
+                : 'Offer bundle applied from ${_sourceLabel(source)}.',
+            direction: PeerSessionHistoryDirection.incoming,
+          );
+        }
+
         if (mounted &&
             ref.read(peerSessionControllerProvider).lastError == null) {
           _signalController.clear();
@@ -248,6 +292,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           );
         }
 
+        if (ref.read(peerSessionControllerProvider).lastError == null) {
+          controller.recordHistory(
+            title: 'Reply imported',
+            detail: source == null
+                ? 'Answer bundle applied from the chat input field.'
+                : 'Answer bundle applied from ${_sourceLabel(source)}.',
+            direction: PeerSessionHistoryDirection.incoming,
+          );
+        }
+
         if (mounted &&
             ref.read(peerSessionControllerProvider).lastError == null) {
           _signalController.clear();
@@ -262,8 +316,55 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _consumePeerInput(PendingPeerInput input) async {
+    ref.read(pendingPeerInputProvider.notifier).state = null;
+    _signalController.text = input.rawValue;
+    await _applyImportedTextValue(
+      input.rawValue,
+      selectedContact: ref.read(selectedContactProvider),
+      source: input.source,
+    );
+  }
+
+  String _sourceLabel(PeerInputSource source) {
+    switch (source) {
+      case PeerInputSource.deepLink:
+        return 'deep link';
+      case PeerInputSource.clipboard:
+        return 'clipboard';
+    }
+  }
+
+  Future<void> _pasteInviteFromClipboard() async {
+    final data = await Clipboard.getData('text/plain');
+    final text = data?.text?.trim();
+    if (text == null || text.isEmpty) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('Clipboard is empty or does not contain invite text.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    ref.read(pendingPeerInputProvider.notifier).state = PendingPeerInput(
+      rawValue: text,
+      source: PeerInputSource.clipboard,
+      receivedAt: DateTime.now(),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    ref.listen<PendingPeerInput?>(pendingPeerInputProvider, (previous, next) {
+      if (next == null) {
+        return;
+      }
+      unawaited(_consumePeerInput(next));
+    });
+
     ref.listen<PeerConnectIntent?>(pendingPeerConnectIntentProvider,
         (previous, next) {
       if (next == null) {
@@ -310,6 +411,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               sessionState: peerSession,
               manualUri: selectedUri?.toString(),
             );
+    final invitationLink = invitationDraft == null ||
+        !invitationDraft.hasReadyBundle
+      ? null
+      : ref
+        .read(peerDeepLinkServiceProvider)
+        .buildInputUri(invitationDraft.clipboardText);
 
     return SafeArea(
       child: Padding(
@@ -320,7 +427,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Text('GungChat Bootstrap', style: theme.textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
-              'Invite import, saved contacts, and manual signaling now feed the same peer session flow.',
+              'Invite import, deep links, saved contacts, and manual signaling now feed the same peer session flow.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -393,6 +500,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         invitationDraft.copyActionLabel,
                         invitationDraft.clipboardText,
                       ),
+                onCopyLink: invitationLink == null
+                  ? null
+                  : () => _copyText('Deep link', invitationLink.toString()),
+                onPasteInvite: _pasteInviteFromClipboard,
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -628,8 +739,10 @@ class _PeerSessionCard extends StatelessWidget {
     required this.onStartOffer,
     required this.onApplySignal,
     required this.onReset,
+    required this.onPasteInvite,
     this.onConnect,
     this.onCopyInvitation,
+    this.onCopyLink,
     this.invitationDraft,
     this.selectedContact,
   });
@@ -640,8 +753,10 @@ class _PeerSessionCard extends StatelessWidget {
   final Future<void> Function() onStartOffer;
   final Future<void> Function() onApplySignal;
   final Future<void> Function() onReset;
+  final Future<void> Function() onPasteInvite;
   final Future<void> Function()? onConnect;
   final VoidCallback? onCopyInvitation;
+  final VoidCallback? onCopyLink;
   final PeerInvitationDraft? invitationDraft;
 
   @override
@@ -708,6 +823,12 @@ class _PeerSessionCard extends StatelessWidget {
                             onPressed: onCopyInvitation,
                             icon: const Icon(Icons.copy_all_outlined),
                             label: Text(invitationDraft!.copyActionLabel),
+                          ),
+                        if (onCopyLink != null)
+                          FilledButton.tonalIcon(
+                            onPressed: onCopyLink,
+                            icon: const Icon(Icons.phonelink_outlined),
+                            label: const Text('Copy Link'),
                           ),
                       ],
                     ),
@@ -789,6 +910,12 @@ class _PeerSessionCard extends StatelessWidget {
                 ),
               ),
               const SizedBox(width: 12),
+              FilledButton.tonalIcon(
+                onPressed: sessionState.isApplyingSignal ? null : onPasteInvite,
+                icon: const Icon(Icons.content_paste_go_outlined),
+                label: const Text('Paste Invite'),
+              ),
+              const SizedBox(width: 12),
               IconButton(
                 tooltip: 'Reset session',
                 onPressed: sessionState.isSessionActive ? onReset : null,
@@ -846,6 +973,29 @@ class _PeerSessionCard extends StatelessWidget {
                 itemBuilder: (context, index) {
                   final signal = sessionState.localSignals[index];
                   return _SignalTile(signal: signal);
+                },
+              ),
+            ),
+          ],
+          if (sessionState.history.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Handshake timeline',
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 260),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: sessionState.history.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final entry = sessionState.history[index];
+                  return _HistoryTile(entry: entry);
                 },
               ),
             ),
@@ -924,6 +1074,41 @@ class _SignalTile extends StatelessWidget {
             ),
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _HistoryTile extends StatelessWidget {
+  const _HistoryTile({required this.entry});
+
+  final PeerSessionHistoryEntry entry;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final icon = switch (entry.direction) {
+      PeerSessionHistoryDirection.incoming => Icons.south_west,
+      PeerSessionHistoryDirection.outgoing => Icons.north_east,
+      PeerSessionHistoryDirection.system => Icons.timeline,
+    };
+
+    final time = entry.occurredAt.toLocal();
+    final timeLabel =
+        '${time.hour.toString().padLeft(2, '0')}:${time.minute.toString().padLeft(2, '0')}:${time.second.toString().padLeft(2, '0')}';
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: ListTile(
+        dense: true,
+        leading: Icon(icon),
+        title: Text(entry.title),
+        subtitle: entry.detail == null
+            ? Text(timeLabel)
+            : Text('${entry.detail}\n$timeLabel'),
       ),
     );
   }

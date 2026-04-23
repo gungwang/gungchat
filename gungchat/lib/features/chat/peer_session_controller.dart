@@ -24,6 +24,12 @@ enum PeerSessionRole {
   responder,
 }
 
+enum PeerSessionHistoryDirection {
+  incoming,
+  outgoing,
+  system,
+}
+
 @immutable
 class ShareableSignal {
   const ShareableSignal({
@@ -49,6 +55,21 @@ class ShareableSignal {
 }
 
 @immutable
+class PeerSessionHistoryEntry {
+  const PeerSessionHistoryEntry({
+    required this.title,
+    required this.occurredAt,
+    this.detail,
+    this.direction = PeerSessionHistoryDirection.system,
+  });
+
+  final String title;
+  final String? detail;
+  final DateTime occurredAt;
+  final PeerSessionHistoryDirection direction;
+}
+
+@immutable
 class PeerSessionState {
   const PeerSessionState({
     this.sessionId,
@@ -65,6 +86,7 @@ class PeerSessionState {
     this.expectedRemoteFingerprint,
     this.targetDisplayName,
     this.targetAddress,
+    this.history = const [],
   });
 
   final String? sessionId;
@@ -81,6 +103,7 @@ class PeerSessionState {
   final String? expectedRemoteFingerprint;
   final String? targetDisplayName;
   final String? targetAddress;
+  final List<PeerSessionHistoryEntry> history;
 
   bool get isSessionActive => sessionId != null;
 
@@ -104,6 +127,7 @@ class PeerSessionState {
     Object? expectedRemoteFingerprint = _sentinel,
     Object? targetDisplayName = _sentinel,
     Object? targetAddress = _sentinel,
+    List<PeerSessionHistoryEntry>? history,
   }) {
     return PeerSessionState(
       sessionId: identical(sessionId, _sentinel)
@@ -137,6 +161,7 @@ class PeerSessionState {
       targetAddress: identical(targetAddress, _sentinel)
           ? this.targetAddress
           : targetAddress as String?,
+      history: history ?? this.history,
     );
   }
 }
@@ -191,6 +216,16 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       lastEvent: targetContact == null
           ? 'Offer is being prepared for manual sharing.'
           : 'Offer is being prepared for ${targetContact.displayName}.',
+      history: [
+        PeerSessionHistoryEntry(
+          title: targetContact == null
+              ? 'Offer started'
+              : 'Offer started for ${targetContact.displayName}',
+          detail: targetContact?.lastKnownAddress,
+          occurredAt: DateTime.now(),
+          direction: PeerSessionHistoryDirection.outgoing,
+        ),
+      ],
     );
 
     try {
@@ -317,6 +352,20 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     state = const PeerSessionState();
   }
 
+  void recordHistory({
+    required String title,
+    String? detail,
+    PeerSessionHistoryDirection direction = PeerSessionHistoryDirection.system,
+    DateTime? occurredAt,
+  }) {
+    _pushHistory(
+      title: title,
+      detail: detail,
+      direction: direction,
+      occurredAt: occurredAt,
+    );
+  }
+
   @override
   void dispose() {
     _stateSubscription?.cancel();
@@ -367,6 +416,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       lastEvent:
           'Answer ready. Share it back, then keep exchanging ICE payloads until the channel opens.',
     );
+    _pushHistory(
+      title: 'Offer imported',
+      detail: 'Reply bundle is ready to share back to the sender.',
+      direction: PeerSessionHistoryDirection.incoming,
+    );
   }
 
   Future<void> _applyRemoteAnswer(SignalingEnvelope envelope) async {
@@ -396,6 +450,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       lastEvent:
           'Answer applied. Add any remaining ICE payloads while the secure channel finishes connecting.',
     );
+    _pushHistory(
+      title: 'Answer imported',
+      detail: 'The remote answer was applied to the active session.',
+      direction: PeerSessionHistoryDirection.incoming,
+    );
   }
 
   Future<void> _applyRemoteIceCandidate(SignalingEnvelope envelope) async {
@@ -412,11 +471,21 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         lastEvent:
             'Remote ICE stored for this session. It will apply after the remote description is ready.',
       );
+      _pushHistory(
+        title: 'ICE imported',
+        detail: 'Queued until the remote description is ready.',
+        direction: PeerSessionHistoryDirection.incoming,
+      );
       return;
     }
 
     await _webRtcManager.addIceCandidate(candidate);
     state = state.copyWith(lastEvent: 'Remote ICE candidate applied.');
+    _pushHistory(
+      title: 'ICE imported',
+      detail: 'Applied immediately to the active peer connection.',
+      direction: PeerSessionHistoryDirection.incoming,
+    );
   }
 
   Future<void> _configureTransport({required bool initiator}) async {
@@ -503,6 +572,12 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       );
 
     state = state.copyWith(localSignals: signals, lastError: null);
+    _pushHistory(
+      title: '${signals.last.label} generated',
+      detail: 'Ready to share with the peer.',
+      direction: PeerSessionHistoryDirection.outgoing,
+      occurredAt: envelope.sentAt,
+    );
   }
 
   Future<void> _handleInboundTransport(String rawMessage) async {
@@ -585,14 +660,53 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         lastEvent: 'Secure data channel is open. Peer messaging is live.',
         lastError: null,
       );
+      if (state.connectionState != WebRtcSessionState.open) {
+        _pushHistory(
+          title: 'Secure channel open',
+          detail: 'Peer messaging is live.',
+          direction: PeerSessionHistoryDirection.system,
+        );
+      }
     } else if (connectionState == WebRtcSessionState.failed) {
       nextState = nextState.copyWith(
         lastError:
             'Peer connection failed. Start a fresh offer and re-exchange the signaling payloads.',
       );
+      if (state.connectionState != WebRtcSessionState.failed) {
+        _pushHistory(
+          title: 'Peer connection failed',
+          detail: 'Start a fresh offer and re-exchange the signaling payloads.',
+          direction: PeerSessionHistoryDirection.system,
+        );
+      }
     }
 
     state = nextState;
+  }
+
+  void _pushHistory({
+    required String title,
+    String? detail,
+    PeerSessionHistoryDirection direction = PeerSessionHistoryDirection.system,
+    DateTime? occurredAt,
+  }) {
+    final next = <PeerSessionHistoryEntry>[
+      PeerSessionHistoryEntry(
+        title: title,
+        detail: detail,
+        direction: direction,
+        occurredAt: occurredAt ?? DateTime.now(),
+      ),
+      ...state.history,
+    ];
+
+    if (next.length > 12) {
+      next.removeRange(12, next.length);
+    }
+
+    state = state.copyWith(
+      history: List<PeerSessionHistoryEntry>.unmodifiable(next),
+    );
   }
 
   Map<String, dynamic> _descriptionPayload(
