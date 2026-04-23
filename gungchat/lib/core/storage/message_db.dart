@@ -17,7 +17,7 @@ class MessageDatabase {
 
     _database = await openDatabase(
       databasePath,
-      version: 2,
+      version: 3,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE messages(
@@ -32,7 +32,8 @@ class MessageDatabase {
             burn_after_read INTEGER NOT NULL,
             expires_at TEXT,
             reply_to_message_id TEXT,
-            reply_to_body TEXT
+            reply_to_body TEXT,
+            reactions_json TEXT
           )
         ''');
       },
@@ -43,6 +44,11 @@ class MessageDatabase {
           );
           await database.execute(
             'ALTER TABLE messages ADD COLUMN reply_to_body TEXT',
+          );
+        }
+        if (oldVersion < 3) {
+          await database.execute(
+            'ALTER TABLE messages ADD COLUMN reactions_json TEXT',
           );
         }
       },
@@ -65,6 +71,20 @@ class MessageDatabase {
       'messages',
       <String, Object?>{
         'delivery_state': deliveryState.name,
+      },
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  Future<void> updateReactions(
+    String messageId,
+    Map<String, List<String>> reactions,
+  ) async {
+    await _requireDatabase().update(
+      'messages',
+      <String, Object?>{
+        'reactions_json': Message.encodeReactions(reactions),
       },
       where: 'id = ?',
       whereArgs: [messageId],

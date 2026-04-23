@@ -85,4 +85,47 @@ void main() {
 
     expect(replyInvoked, isTrue);
   });
+
+  testWidgets('message bubble renders reactions and toggles them', (
+    WidgetTester tester,
+  ) async {
+    String? toggledEmoji;
+    final message = Message(
+      id: '3',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: 'react to this message',
+      type: MessageType.text,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 35),
+      isOutgoing: true,
+      reactions: const {
+        '👍': ['peer-a', 'peer-b'],
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(12),
+            child: MessageBubble(
+              message: message,
+              currentUserId: 'peer-a',
+              onToggleReaction: (emoji) {
+                toggledEmoji = emoji;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('👍 2'), findsOneWidget);
+
+    await tester.tap(find.text('👍 2'));
+    await tester.pump();
+
+    expect(toggledEmoji, '👍');
+  });
 }

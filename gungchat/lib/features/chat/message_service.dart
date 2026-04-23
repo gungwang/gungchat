@@ -70,6 +70,13 @@ class MessageService {
     return _messageDatabase.updateDeliveryState(messageId, deliveryState);
   }
 
+  Future<void> updateReactions(
+    String messageId,
+    Map<String, List<String>> reactions,
+  ) {
+    return _messageDatabase.updateReactions(messageId, reactions);
+  }
+
   Future<EncryptedPayload> encryptForTransport({
     required String body,
     required SecretKey sharedSecret,

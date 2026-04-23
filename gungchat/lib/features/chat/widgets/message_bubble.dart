@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../reaction_service.dart';
 import '../../../models/message.dart';
 
 class MessageBubble extends StatelessWidget {
@@ -9,12 +10,16 @@ class MessageBubble extends StatelessWidget {
     this.onReply,
     this.onQuotedMessageTap,
     this.isHighlighted = false,
+    this.currentUserId,
+    this.onToggleReaction,
   });
 
   final Message message;
   final VoidCallback? onReply;
   final VoidCallback? onQuotedMessageTap;
   final bool isHighlighted;
+  final String? currentUserId;
+  final ValueChanged<String>? onToggleReaction;
 
   @override
   Widget build(BuildContext context) {
@@ -25,6 +30,8 @@ class MessageBubble extends StatelessWidget {
         ? theme.colorScheme.primaryContainer
         : theme.colorScheme.surfaceContainerHighest;
     final replyPreview = _replyPreviewText();
+    final reactionEntries = message.reactions.entries.toList(growable: false)
+      ..sort((left, right) => left.key.compareTo(right.key));
     final bubble = AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -86,6 +93,46 @@ class MessageBubble extends StatelessWidget {
             _metadataLabel(),
             style: theme.textTheme.labelSmall,
           ),
+          if (reactionEntries.isNotEmpty || onToggleReaction != null) ...[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: [
+                for (final entry in reactionEntries)
+                  InputChip(
+                    label: Text('${entry.key} ${entry.value.length}'),
+                    selected: currentUserId != null &&
+                        entry.value.contains(currentUserId),
+                    onPressed: onToggleReaction == null
+                        ? null
+                        : () => onToggleReaction!(entry.key),
+                    materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                if (onToggleReaction != null)
+                  PopupMenuButton<String>(
+                    tooltip: 'Add reaction',
+                    onSelected: onToggleReaction,
+                    itemBuilder: (context) {
+                      return [
+                        for (final emoji in ReactionService.defaultEmojis)
+                          PopupMenuItem<String>(
+                            value: emoji,
+                            child: Text(emoji),
+                          ),
+                      ];
+                    },
+                    icon: const Icon(Icons.add_reaction_outlined),
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 36,
+                      height: 36,
+                    ),
+                    iconSize: 18,
+                  ),
+              ],
+            ),
+          ],
         ],
       ),
     );

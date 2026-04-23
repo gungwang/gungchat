@@ -138,6 +138,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return '${compact.substring(0, 96)}...';
   }
 
+  void _toggleReaction(Message message, String emoji) {
+    unawaited(
+      ref.read(peerSessionControllerProvider.notifier).toggleReaction(
+            message: message,
+            emoji: emoji,
+          ),
+    );
+  }
+
   Future<void> _copyInvitationDraft(
     PeerInvitationDraft draft,
     Contact? selectedContact,
@@ -584,6 +593,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final theme = Theme.of(context);
     final identityAsync = ref.watch(deviceIdentityProvider);
+    final localUserId = identityAsync.asData?.value.fingerprint;
     final networkAsync = ref.watch(networkStatusProvider);
     final peerSession = ref.watch(peerSessionControllerProvider);
     final savedContacts = ref.watch(contactBookProvider);
@@ -772,7 +782,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       return ListView(
                         children: [
                           for (final message in messages)
-                            _buildMessage(message, messages),
+                            _buildMessage(
+                              message,
+                              messages,
+                              localUserId: localUserId,
+                              canToggleReactions:
+                                  peerSession.isTransportReady &&
+                                      localUserId != null &&
+                                      message.type != MessageType.system,
+                            ),
                         ],
                       );
                     },
@@ -954,14 +972,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildMessage(Message message, List<Message> messages) {
+  Widget _buildMessage(
+    Message message,
+    List<Message> messages, {
+    required String? localUserId,
+    required bool canToggleReactions,
+  }) {
     return MessageBubble(
       key: _messageKeyFor(message.id),
       message: message,
       isHighlighted: _highlightedMessageId == message.id,
+      currentUserId: localUserId,
       onReply: message.type == MessageType.system
           ? null
           : () => _startReply(message),
+      onToggleReaction: canToggleReactions
+          ? (emoji) => _toggleReaction(message, emoji)
+          : null,
       onQuotedMessageTap: message.replyToMessageId == null
           ? null
           : () => _jumpToQuotedMessage(

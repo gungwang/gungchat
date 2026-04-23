@@ -114,6 +114,29 @@ void main() {
       expect(decoded.receiptState, MessageDeliveryState.read);
     });
 
+    test('round-trips reaction envelopes', () {
+      final envelope = PeerTransportEnvelope.reaction(
+        messageId: 'message-4',
+        senderFingerprint: '00:11:22:33',
+        createdAt: DateTime.utc(2025, 1, 2, 3, 4, 5),
+        reactions: const {
+          '👍': ['00:11:22:33'],
+          '❤️': ['44:55:66:77', '00:11:22:33'],
+        },
+      );
+
+      final decoded = PeerTransportEnvelope.decodeTransportString(
+        envelope.encodeTransportString(),
+      );
+
+      expect(decoded.kind, PeerTransportEnvelopeKind.reaction);
+      expect(decoded.messageId, 'message-4');
+      expect(decoded.reactions, const {
+        '👍': ['00:11:22:33'],
+        '❤️': ['44:55:66:77', '00:11:22:33'],
+      });
+    });
+
     test('decodes legacy message envelopes without kind', () {
       final legacyJson = jsonEncode({
         'messageId': 'legacy-message',
