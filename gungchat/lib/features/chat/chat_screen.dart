@@ -1,10 +1,13 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/encryption/key_manager.dart';
 import '../../core/networking/network_monitor.dart';
+import '../../core/networking/webrtc_manager.dart';
 import '../../models/message.dart';
+import 'peer_session_controller.dart';
 import 'widgets/message_bubble.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
@@ -16,12 +19,14 @@ class ChatScreen extends ConsumerStatefulWidget {
 
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _composerController = TextEditingController();
+  final TextEditingController _signalController = TextEditingController();
   bool _burnAfterRead = true;
   bool _sending = false;
 
   @override
   void dispose() {
     _composerController.dispose();
+    _signalController.dispose();
     super.dispose();
   }
 
@@ -31,20 +36,41 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
+    final peerSession = ref.read(peerSessionControllerProvider);
+
+    if (peerSession.isSessionActive && !peerSession.isTransportReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content:
+              Text('Finish the signal exchange before sending peer messages.'),
+        ),
+      );
+      return;
+    }
+
     setState(() {
       _sending = true;
     });
 
     try {
-      final messageService = await ref.read(messageServiceProvider.future);
-      await messageService.createLocalMessage(
-        conversationId: bootstrapConversationId,
-        senderId: identity.fingerprint,
-        body: text,
-        burnAfterRead: _burnAfterRead,
-      );
-      _composerController.clear();
-      ref.invalidate(conversationMessagesProvider(bootstrapConversationId));
+      if (peerSession.isTransportReady) {
+        final sent = await ref
+            .read(peerSessionControllerProvider.notifier)
+            .sendMessage(body: text, burnAfterRead: _burnAfterRead);
+        if (sent) {
+          _composerController.clear();
+        }
+      } else {
+        final messageService = await ref.read(messageServiceProvider.future);
+        await messageService.createLocalMessage(
+          conversationId: bootstrapConversationId,
+          senderId: identity.fingerprint,
+          body: text,
+          burnAfterRead: _burnAfterRead,
+        );
+        _composerController.clear();
+        ref.invalidate(conversationMessagesProvider(bootstrapConversationId));
+      }
     } finally {
       if (mounted) {
         setState(() {
@@ -59,9 +85,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final theme = Theme.of(context);
     final identityAsync = ref.watch(deviceIdentityProvider);
     final networkAsync = ref.watch(networkStatusProvider);
+    final peerSession = ref.watch(peerSessionControllerProvider);
+    final activeConversationId =
+        peerSession.conversationId ?? bootstrapConversationId;
     final messagesAsync = ref.watch(
-      conversationMessagesProvider(bootstrapConversationId),
+      conversationMessagesProvider(activeConversationId),
     );
+    final canSendSecure = peerSession.isTransportReady;
+    final canSaveLocal = !peerSession.isSessionActive;
+    final composerEnabled = canSendSecure || canSaveLocal;
 
     return SafeArea(
       child: Padding(
@@ -72,13 +104,44 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Text('GungChat Bootstrap', style: theme.textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
-              'Phase 1 is focused on identity, storage, encryption, and transport scaffolding.',
+              'Phase 1 now includes manual offer, answer, and ICE exchange for encrypted peer messaging.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
             _IdentityCard(identityAsync: identityAsync),
             const SizedBox(height: 12),
             _NetworkCard(networkAsync: networkAsync),
+            const SizedBox(height: 12),
+            _PeerSessionCard(
+              sessionState: peerSession,
+              signalController: _signalController,
+              onStartOffer: () async {
+                await ref
+                    .read(peerSessionControllerProvider.notifier)
+                    .startOffer();
+              },
+              onApplySignal: () async {
+                final signal = _signalController.text.trim();
+                if (signal.isEmpty) {
+                  return;
+                }
+                await ref
+                    .read(peerSessionControllerProvider.notifier)
+                    .applyRemoteSignal(signal);
+                if (mounted &&
+                    ref.read(peerSessionControllerProvider).lastError == null) {
+                  _signalController.clear();
+                }
+              },
+              onReset: () async {
+                await ref
+                    .read(peerSessionControllerProvider.notifier)
+                    .resetSession();
+                if (mounted) {
+                  _signalController.clear();
+                }
+              },
+            ),
             const SizedBox(height: 12),
             Expanded(
               child: Card(
@@ -89,7 +152,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       if (messages.isEmpty) {
                         return Center(
                           child: Text(
-                            'No messages yet. Send a local bootstrap message to validate persistence and ephemeral defaults.',
+                            peerSession.conversationId == null
+                                ? 'No messages yet. Save a local bootstrap message or complete a manual peer session.'
+                                : 'No peer messages yet. Once the secure channel opens, your conversation will appear here.',
                             style: theme.textTheme.bodyMedium,
                             textAlign: TextAlign.center,
                           ),
@@ -104,7 +169,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         },
                       );
                     },
-                    loading: () => const Center(child: CircularProgressIndicator()),
+                    loading: () =>
+                        const Center(child: CircularProgressIndicator()),
                     error: (error, stackTrace) {
                       return Center(child: Text('Message load failed: $error'));
                     },
@@ -117,16 +183,40 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Text(
+                      canSendSecure
+                          ? 'Conversation: ${peerSession.remoteFingerprint ?? activeConversationId}'
+                          : canSaveLocal
+                              ? 'Conversation: local bootstrap cache'
+                              : 'Conversation: waiting for secure channel',
+                      style: theme.textTheme.labelLarge,
+                    ),
+                    const SizedBox(height: 12),
                     TextField(
                       controller: _composerController,
                       maxLines: 3,
                       minLines: 1,
+                      enabled: composerEnabled,
                       textInputAction: TextInputAction.send,
-                      decoration: const InputDecoration(
-                        labelText: 'Bootstrap message',
-                        hintText: 'Type a local encrypted message draft...',
-                        border: OutlineInputBorder(),
+                      onSubmitted: identityAsync.asData == null ||
+                              _sending ||
+                              !composerEnabled
+                          ? null
+                          : (_) => _sendMessage(identityAsync.requireValue),
+                      decoration: InputDecoration(
+                        labelText: canSendSecure
+                            ? 'Secure peer message'
+                            : canSaveLocal
+                                ? 'Bootstrap message'
+                                : 'Peer message',
+                        hintText: canSendSecure
+                            ? 'Type an encrypted message for the active peer session...'
+                            : canSaveLocal
+                                ? 'Type a local encrypted message draft...'
+                                : 'Complete the signal exchange to enable the secure composer.',
+                        border: const OutlineInputBorder(),
                       ),
                     ),
                     SwitchListTile.adaptive(
@@ -138,25 +228,36 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         });
                       },
                       title: const Text('Burn after read by default'),
-                      subtitle: const Text(
-                        'Initial TTL is handled locally until peer session sync is added.',
+                      subtitle: Text(
+                        canSendSecure
+                            ? 'Expiry metadata is sent with each encrypted peer message.'
+                            : 'Initial TTL is handled locally until peer session sync is added.',
                       ),
                     ),
                     const SizedBox(height: 8),
                     SizedBox(
                       width: double.infinity,
                       child: FilledButton.icon(
-                        onPressed: identityAsync.asData == null || _sending
+                        onPressed: identityAsync.asData == null ||
+                                _sending ||
+                                !composerEnabled
                             ? null
                             : () => _sendMessage(identityAsync.requireValue),
                         icon: _sending
                             ? const SizedBox(
                                 width: 18,
                                 height: 18,
-                                child: CircularProgressIndicator(strokeWidth: 2),
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
                               )
                             : const Icon(Icons.send),
-                        label: const Text('Save Local Message'),
+                        label: Text(
+                          canSendSecure
+                              ? 'Send Secure Message'
+                              : canSaveLocal
+                                  ? 'Save Local Message'
+                                  : 'Wait For Secure Channel',
+                        ),
                       ),
                     ),
                   ],
@@ -171,6 +272,251 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   Widget _buildMessage(Message message) {
     return MessageBubble(message: message);
+  }
+}
+
+class _PeerSessionCard extends StatelessWidget {
+  const _PeerSessionCard({
+    required this.sessionState,
+    required this.signalController,
+    required this.onStartOffer,
+    required this.onApplySignal,
+    required this.onReset,
+  });
+
+  final PeerSessionState sessionState;
+  final TextEditingController signalController;
+  final Future<void> Function() onStartOffer;
+  final Future<void> Function() onApplySignal;
+  final Future<void> Function() onReset;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Card(
+      child: ExpansionTile(
+        initiallyExpanded: sessionState.isSessionActive,
+        tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+        childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+        title: const Text('Manual Peer Session'),
+        subtitle: Text(_subtitleForState(sessionState)),
+        trailing: _StateChip(state: sessionState),
+        children: [
+          Align(
+            alignment: Alignment.centerLeft,
+            child: Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: [
+                if (sessionState.role != null)
+                  Chip(
+                    label: Text(
+                      sessionState.role == PeerSessionRole.initiator
+                          ? 'Offering'
+                          : 'Answering',
+                    ),
+                  ),
+                if (sessionState.remoteFingerprint != null)
+                  Chip(label: Text(sessionState.remoteFingerprint!)),
+                if (sessionState.pendingRemoteIceCount > 0)
+                  Chip(
+                    label: Text(
+                      'Queued ICE ${sessionState.pendingRemoteIceCount}',
+                    ),
+                  ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 12),
+          TextField(
+            controller: signalController,
+            maxLines: 5,
+            minLines: 3,
+            decoration: const InputDecoration(
+              labelText: 'Paste remote offer, answer, or ICE payload',
+              border: OutlineInputBorder(),
+            ),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: FilledButton.icon(
+                  onPressed: onStartOffer,
+                  icon: const Icon(Icons.outbox_outlined),
+                  label: const Text('Start Offer'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton.tonalIcon(
+                  onPressed:
+                      sessionState.isApplyingSignal ? null : onApplySignal,
+                  icon: sessionState.isApplyingSignal
+                      ? const SizedBox(
+                          width: 18,
+                          height: 18,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Icon(Icons.download_outlined),
+                  label: const Text('Apply Signal'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              IconButton(
+                tooltip: 'Reset session',
+                onPressed: sessionState.isSessionActive ? onReset : null,
+                icon: const Icon(Icons.restart_alt),
+              ),
+            ],
+          ),
+          if (sessionState.lastError != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              sessionState.lastError!,
+              style: theme.textTheme.bodyMedium?.copyWith(
+                color: theme.colorScheme.error,
+              ),
+            ),
+          ],
+          if (sessionState.lastEvent != null) ...[
+            const SizedBox(height: 8),
+            Text(
+              sessionState.lastEvent!,
+              style: theme.textTheme.bodyMedium,
+            ),
+          ],
+          if (sessionState.sessionId != null) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Session ${sessionState.sessionId}',
+              style: theme.textTheme.labelLarge,
+            ),
+          ],
+          if (sessionState.localSignals.isNotEmpty) ...[
+            const SizedBox(height: 12),
+            Align(
+              alignment: Alignment.centerLeft,
+              child: Text(
+                'Signals to share',
+                style: theme.textTheme.titleSmall,
+              ),
+            ),
+            const SizedBox(height: 8),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220),
+              child: ListView.separated(
+                shrinkWrap: true,
+                itemCount: sessionState.localSignals.length,
+                separatorBuilder: (_, __) => const SizedBox(height: 8),
+                itemBuilder: (context, index) {
+                  final signal = sessionState.localSignals[index];
+                  return _SignalTile(signal: signal);
+                },
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  String _subtitleForState(PeerSessionState sessionState) {
+    if (sessionState.isTransportReady) {
+      return 'Secure channel open';
+    }
+    if (sessionState.isSessionActive) {
+      return 'Exchange offer, answer, and ICE payloads';
+    }
+    return 'Start an offer or paste a remote offer to answer manually';
+  }
+}
+
+class _SignalTile extends StatelessWidget {
+  const _SignalTile({required this.signal});
+
+  final ShareableSignal signal;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(color: theme.colorScheme.outlineVariant),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(signal.label, style: theme.textTheme.titleSmall),
+                  const SizedBox(height: 4),
+                  Text(
+                    signal.encoded,
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                    style: theme.textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            IconButton(
+              tooltip: 'Copy signal',
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: signal.encoded));
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text('${signal.label} copied')),
+                  );
+                }
+              },
+              icon: const Icon(Icons.copy_all_outlined),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StateChip extends StatelessWidget {
+  const _StateChip({required this.state});
+
+  final PeerSessionState state;
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    final (label, backgroundColor) = switch (state.connectionState) {
+      WebRtcSessionState.open => ('Open', colorScheme.primaryContainer),
+      WebRtcSessionState.connecting => (
+          'Connecting',
+          colorScheme.secondaryContainer,
+        ),
+      WebRtcSessionState.failed => ('Failed', colorScheme.errorContainer),
+      WebRtcSessionState.disconnected => (
+          'Offline',
+          colorScheme.surfaceContainerHighest,
+        ),
+      WebRtcSessionState.closed => (
+          'Closed',
+          colorScheme.surfaceContainerHighest,
+        ),
+      WebRtcSessionState.idle => ('Idle', colorScheme.surfaceContainerHighest),
+    };
+
+    return Chip(
+      label: Text(label),
+      backgroundColor: backgroundColor,
+    );
   }
 }
 
@@ -189,7 +535,10 @@ class _IdentityCard extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Device identity', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Device identity',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 8),
                 Text('Fingerprint: ${identity.fingerprint}'),
                 const SizedBox(height: 4),
@@ -200,7 +549,8 @@ class _IdentityCard extends StatelessWidget {
             );
           },
           loading: () => const LinearProgressIndicator(),
-          error: (error, stackTrace) => Text('Identity bootstrap failed: $error'),
+          error: (error, stackTrace) =>
+              Text('Identity bootstrap failed: $error'),
         ),
       ),
     );
@@ -222,7 +572,10 @@ class _NetworkCard extends StatelessWidget {
             return Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('Network policy', style: Theme.of(context).textTheme.titleMedium),
+                Text(
+                  'Network policy',
+                  style: Theme.of(context).textTheme.titleMedium,
+                ),
                 const SizedBox(height: 8),
                 Text(snapshot.summary),
                 const SizedBox(height: 4),

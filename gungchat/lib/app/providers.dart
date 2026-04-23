@@ -5,11 +5,13 @@ import '../core/encryption/crypto_service.dart';
 import '../core/encryption/key_manager.dart';
 import '../core/networking/ice_manager.dart';
 import '../core/networking/network_monitor.dart';
+import '../core/networking/signaling_service.dart';
 import '../core/networking/webrtc_manager.dart';
 import '../core/storage/message_db.dart';
 import '../core/storage/secure_storage.dart';
 import '../features/chat/ephemeral_manager.dart';
 import '../features/chat/message_service.dart';
+import '../features/chat/peer_session_controller.dart';
 import '../models/message.dart';
 
 const bootstrapConversationId = 'bootstrap';
@@ -47,6 +49,10 @@ final webRtcManagerProvider = Provider<WebRtcManager>((ref) {
   return manager;
 });
 
+final manualSignalingServiceProvider = Provider<ManualSignalingService>((ref) {
+  return const ManualSignalingService();
+});
+
 final networkMonitorProvider = Provider<NetworkMonitor>((ref) {
   return NetworkMonitor();
 });
@@ -75,6 +81,22 @@ final messageServiceProvider = FutureProvider<MessageService>((ref) async {
     cryptoService: ref.watch(cryptoServiceProvider),
     ephemeralManager: ref.watch(ephemeralManagerProvider),
   );
+});
+
+final peerSessionControllerProvider =
+    StateNotifierProvider<PeerSessionController, PeerSessionState>((ref) {
+  final controller = PeerSessionController(
+    loadIdentity: () => ref.read(keyManagerProvider).getOrCreateIdentity(),
+    loadMessageService: () => ref.read(messageServiceProvider.future),
+    refreshConversation: (conversationId) {
+      ref.invalidate(conversationMessagesProvider(conversationId));
+    },
+    webRtcManager: ref.watch(webRtcManagerProvider),
+    signalingService: ref.watch(manualSignalingServiceProvider),
+    cryptoService: ref.watch(cryptoServiceProvider),
+  );
+  ref.onDispose(controller.dispose);
+  return controller;
 });
 
 final conversationMessagesProvider =

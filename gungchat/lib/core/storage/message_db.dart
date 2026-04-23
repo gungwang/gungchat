@@ -45,6 +45,20 @@ class MessageDatabase {
     );
   }
 
+  Future<void> updateDeliveryState(
+    String messageId,
+    MessageDeliveryState deliveryState,
+  ) async {
+    await _requireDatabase().update(
+      'messages',
+      <String, Object?>{
+        'delivery_state': deliveryState.name,
+      },
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
   Future<List<Message>> listMessages(String conversationId) async {
     final rows = await _requireDatabase().query(
       'messages',

@@ -33,6 +33,7 @@ class MessageService {
     required String body,
     bool burnAfterRead = true,
     Duration? ttl,
+    MessageDeliveryState deliveryState = MessageDeliveryState.local,
   }) async {
     final message = Message(
       id: _uuid.v4(),
@@ -40,7 +41,7 @@ class MessageService {
       senderId: senderId,
       body: body,
       type: MessageType.text,
-      deliveryState: MessageDeliveryState.local,
+      deliveryState: deliveryState,
       createdAt: DateTime.now(),
       isOutgoing: true,
       burnAfterRead: burnAfterRead,
@@ -58,17 +59,26 @@ class MessageService {
     return _messageDatabase.upsertMessage(message.copyWith(isOutgoing: false));
   }
 
+  Future<void> updateDeliveryState(
+    String messageId,
+    MessageDeliveryState deliveryState,
+  ) {
+    return _messageDatabase.updateDeliveryState(messageId, deliveryState);
+  }
+
   Future<EncryptedPayload> encryptForTransport({
     required String body,
     required SecretKey sharedSecret,
   }) {
-    return _cryptoService.encryptString(plaintext: body, secretKey: sharedSecret);
+    return _cryptoService.encryptString(
+        plaintext: body, secretKey: sharedSecret);
   }
 
   Future<String?> decryptFromTransport({
     required EncryptedPayload payload,
     required SecretKey sharedSecret,
   }) {
-    return _cryptoService.decryptString(payload: payload, secretKey: sharedSecret);
+    return _cryptoService.decryptString(
+        payload: payload, secretKey: sharedSecret);
   }
 }
