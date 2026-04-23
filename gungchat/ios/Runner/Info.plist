@@ -26,6 +26,12 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_gungchat._udp</string>
+	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>GungChat uses the local network to discover nearby peers for direct encrypted connections.</string>
 	<key>UIApplicationSceneManifest</key>
 	<dict>
 		<key>UIApplicationSupportsMultipleScenes</key>

@@ -12,6 +12,10 @@ import '../core/storage/secure_storage.dart';
 import '../features/chat/ephemeral_manager.dart';
 import '../features/chat/message_service.dart';
 import '../features/chat/peer_session_controller.dart';
+import '../features/contacts/contact_book_controller.dart';
+import '../features/contacts/contact_exchange_service.dart';
+import '../features/contacts/discovery_service.dart';
+import '../models/contact.dart';
 import '../models/message.dart';
 
 const bootstrapConversationId = 'bootstrap';
@@ -97,6 +101,21 @@ final peerSessionControllerProvider =
   );
   ref.onDispose(controller.dispose);
   return controller;
+});
+
+final contactExchangeServiceProvider = Provider<ContactExchangeService>((ref) {
+  return const ContactExchangeService();
+});
+
+final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
+  return DiscoveryService(
+    contactExchangeService: ref.watch(contactExchangeServiceProvider),
+  );
+});
+
+final contactBookProvider =
+    StateNotifierProvider<ContactBookController, List<Contact>>((ref) {
+  return ContactBookController();
 });
 
 final conversationMessagesProvider =
