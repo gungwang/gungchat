@@ -26,6 +26,8 @@
 	<string>$(FLUTTER_BUILD_NUMBER)</string>
 	<key>LSRequiresIPhoneOS</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>GungChat uses the camera to scan peer QR codes for direct encrypted contact exchange.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_gungchat._udp</string>

@@ -11,6 +11,7 @@ import '../../core/encryption/crypto_service.dart';
 import '../../core/encryption/key_manager.dart';
 import '../../core/networking/signaling_service.dart';
 import '../../core/networking/webrtc_manager.dart';
+import '../../models/contact.dart';
 import '../../models/message.dart';
 import 'message_service.dart';
 
@@ -424,7 +425,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
 
     state = state.copyWith(
       remoteFingerprint: remoteFingerprint,
-      conversationId: _conversationIdForFingerprint(remoteFingerprint),
+      conversationId: conversationIdForFingerprint(remoteFingerprint),
       hasSharedSecret: true,
       lastError: null,
     );
@@ -479,7 +480,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       }
 
       final conversationId = state.conversationId ??
-          _conversationIdForFingerprint(envelope.senderFingerprint);
+          conversationIdForFingerprint(envelope.senderFingerprint);
 
       await messageService.saveInboundMessage(
         Message(
@@ -601,9 +602,6 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         .map((byte) => byte.toRadixString(16).padLeft(2, '0'))
         .join(':');
   }
-
-  String _conversationIdForFingerprint(String fingerprint) =>
-      'peer:$fingerprint';
 
   void _setError(String message) {
     state = state.copyWith(lastError: message);
