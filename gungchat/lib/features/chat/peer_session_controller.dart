@@ -30,6 +30,24 @@ enum PeerSessionHistoryDirection {
   system,
 }
 
+enum PeerSessionHistoryActionKind {
+  copy,
+  apply,
+}
+
+@immutable
+class PeerSessionHistoryAction {
+  const PeerSessionHistoryAction({
+    required this.kind,
+    required this.label,
+    required this.payload,
+  });
+
+  final PeerSessionHistoryActionKind kind;
+  final String label;
+  final String payload;
+}
+
 @immutable
 class ShareableSignal {
   const ShareableSignal({
@@ -61,12 +79,14 @@ class PeerSessionHistoryEntry {
     required this.occurredAt,
     this.detail,
     this.direction = PeerSessionHistoryDirection.system,
+    this.action,
   });
 
   final String title;
   final String? detail;
   final DateTime occurredAt;
   final PeerSessionHistoryDirection direction;
+  final PeerSessionHistoryAction? action;
 }
 
 @immutable
@@ -86,6 +106,7 @@ class PeerSessionState {
     this.expectedRemoteFingerprint,
     this.targetDisplayName,
     this.targetAddress,
+    this.isRemoteTyping = false,
     this.history = const [],
   });
 
@@ -103,6 +124,7 @@ class PeerSessionState {
   final String? expectedRemoteFingerprint;
   final String? targetDisplayName;
   final String? targetAddress;
+  final bool isRemoteTyping;
   final List<PeerSessionHistoryEntry> history;
 
   bool get isSessionActive => sessionId != null;
@@ -127,6 +149,7 @@ class PeerSessionState {
     Object? expectedRemoteFingerprint = _sentinel,
     Object? targetDisplayName = _sentinel,
     Object? targetAddress = _sentinel,
+    bool? isRemoteTyping,
     List<PeerSessionHistoryEntry>? history,
   }) {
     return PeerSessionState(
@@ -161,6 +184,7 @@ class PeerSessionState {
       targetAddress: identical(targetAddress, _sentinel)
           ? this.targetAddress
           : targetAddress as String?,
+      isRemoteTyping: isRemoteTyping ?? this.isRemoteTyping,
       history: history ?? this.history,
     );
   }
@@ -201,6 +225,9 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   bool _peerConnectionReady = false;
   bool _hasRemoteDescription = false;
   final List<RTCIceCandidate> _pendingRemoteIceCandidates = [];
+  Timer? _localTypingTimer;
+  Timer? _remoteTypingTimer;
+  bool _localTypingActive = false;
 
   Future<void> startOffer({Contact? targetContact}) async {
     final identity = await _ensureLocalIdentity();
@@ -270,11 +297,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       final envelope = _signalingService.decode(trimmed);
       switch (envelope.type) {
         case SignalingEnvelopeType.offer:
-          await _applyRemoteOffer(envelope);
+          await _applyRemoteOffer(envelope, rawSignal: trimmed);
         case SignalingEnvelopeType.answer:
-          await _applyRemoteAnswer(envelope);
+          await _applyRemoteAnswer(envelope, rawSignal: trimmed);
         case SignalingEnvelopeType.iceCandidate:
-          await _applyRemoteIceCandidate(envelope);
+          await _applyRemoteIceCandidate(envelope, rawSignal: trimmed);
       }
     } catch (error) {
       _setError('Could not apply the remote signal: $error');
@@ -315,7 +342,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         body: body,
         sharedSecret: sharedSecret,
       );
-      final transportEnvelope = PeerTransportEnvelope(
+      final transportEnvelope = PeerTransportEnvelope.message(
         messageId: message.id,
         senderFingerprint: identity.fingerprint,
         payload: encryptedPayload,
@@ -324,6 +351,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         expiresAt: message.expiresAt,
       );
 
+      await clearLocalTyping(notifyPeer: false);
       await _webRtcManager.sendText(transportEnvelope.encodeTransportString());
       await messageService.updateDeliveryState(
         message.id,
@@ -344,6 +372,8 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   }
 
   Future<void> resetSession() async {
+    await clearLocalTyping(notifyPeer: false);
+    _remoteTypingTimer?.cancel();
     _sharedSecret = null;
     _peerConnectionReady = false;
     _hasRemoteDescription = false;
@@ -352,27 +382,90 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     state = const PeerSessionState();
   }
 
+  Future<void> markMessagesRead({
+    required String conversationId,
+    required Iterable<String> messageIds,
+    required bool sendReceipt,
+  }) async {
+    final distinctIds = messageIds.toSet().toList(growable: false);
+    if (distinctIds.isEmpty) {
+      return;
+    }
+
+    final messageService = await _loadMessageService();
+    for (final messageId in distinctIds) {
+      await messageService.updateDeliveryState(
+        messageId,
+        MessageDeliveryState.read,
+      );
+      if (sendReceipt) {
+        await _sendReadReceipt(messageId);
+      }
+    }
+
+    _refreshConversation(conversationId);
+  }
+
+  void updateComposerActivity(String draft) {
+    final shouldNotifyTyping =
+        state.isTransportReady && draft.trim().isNotEmpty;
+
+    if (!shouldNotifyTyping) {
+      _localTypingTimer?.cancel();
+      if (_localTypingActive) {
+        unawaited(clearLocalTyping());
+      }
+      return;
+    }
+
+    if (!_localTypingActive) {
+      unawaited(_sendTypingStatus(true));
+    }
+
+    _localTypingTimer?.cancel();
+    _localTypingTimer = Timer(const Duration(seconds: 3), () {
+      unawaited(clearLocalTyping());
+    });
+  }
+
+  Future<void> clearLocalTyping({bool notifyPeer = true}) async {
+    _localTypingTimer?.cancel();
+    if (!notifyPeer || !_localTypingActive) {
+      _localTypingActive = false;
+      return;
+    }
+
+    await _sendTypingStatus(false);
+  }
+
   void recordHistory({
     required String title,
     String? detail,
     PeerSessionHistoryDirection direction = PeerSessionHistoryDirection.system,
     DateTime? occurredAt,
+    PeerSessionHistoryAction? action,
   }) {
     _pushHistory(
       title: title,
       detail: detail,
       direction: direction,
       occurredAt: occurredAt,
+      action: action,
     );
   }
 
   @override
   void dispose() {
+    _localTypingTimer?.cancel();
+    _remoteTypingTimer?.cancel();
     _stateSubscription?.cancel();
     super.dispose();
   }
 
-  Future<void> _applyRemoteOffer(SignalingEnvelope envelope) async {
+  Future<void> _applyRemoteOffer(
+    SignalingEnvelope envelope, {
+    required String rawSignal,
+  }) async {
     final identity = await _ensureLocalIdentity();
 
     if (state.sessionId != envelope.sessionId ||
@@ -420,10 +513,18 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       title: 'Offer imported',
       detail: 'Reply bundle is ready to share back to the sender.',
       direction: PeerSessionHistoryDirection.incoming,
+      action: _signalHistoryAction(
+        type: envelope.type,
+        payload: rawSignal,
+        direction: PeerSessionHistoryDirection.incoming,
+      ),
     );
   }
 
-  Future<void> _applyRemoteAnswer(SignalingEnvelope envelope) async {
+  Future<void> _applyRemoteAnswer(
+    SignalingEnvelope envelope, {
+    required String rawSignal,
+  }) async {
     if (state.sessionId == null ||
         state.sessionId != envelope.sessionId ||
         state.role != PeerSessionRole.initiator) {
@@ -454,10 +555,18 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       title: 'Answer imported',
       detail: 'The remote answer was applied to the active session.',
       direction: PeerSessionHistoryDirection.incoming,
+      action: _signalHistoryAction(
+        type: envelope.type,
+        payload: rawSignal,
+        direction: PeerSessionHistoryDirection.incoming,
+      ),
     );
   }
 
-  Future<void> _applyRemoteIceCandidate(SignalingEnvelope envelope) async {
+  Future<void> _applyRemoteIceCandidate(
+    SignalingEnvelope envelope, {
+    required String rawSignal,
+  }) async {
     if (state.sessionId == null || state.sessionId != envelope.sessionId) {
       throw StateError('This ICE payload does not match the active session.');
     }
@@ -475,6 +584,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         title: 'ICE imported',
         detail: 'Queued until the remote description is ready.',
         direction: PeerSessionHistoryDirection.incoming,
+        action: _signalHistoryAction(
+          type: envelope.type,
+          payload: rawSignal,
+          direction: PeerSessionHistoryDirection.incoming,
+        ),
       );
       return;
     }
@@ -485,6 +599,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       title: 'ICE imported',
       detail: 'Applied immediately to the active peer connection.',
       direction: PeerSessionHistoryDirection.incoming,
+      action: _signalHistoryAction(
+        type: envelope.type,
+        payload: rawSignal,
+        direction: PeerSessionHistoryDirection.incoming,
+      ),
     );
   }
 
@@ -562,11 +681,12 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   }
 
   void _appendLocalSignal(SignalingEnvelope envelope) {
+    final encodedSignal = _signalingService.encode(envelope);
     final signals = List<ShareableSignal>.from(state.localSignals)
       ..add(
         ShareableSignal(
           type: envelope.type,
-          encoded: _signalingService.encode(envelope),
+          encoded: encodedSignal,
           createdAt: envelope.sentAt,
         ),
       );
@@ -577,6 +697,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       detail: 'Ready to share with the peer.',
       direction: PeerSessionHistoryDirection.outgoing,
       occurredAt: envelope.sentAt,
+      action: _signalHistoryAction(
+        type: envelope.type,
+        payload: encodedSignal,
+        direction: PeerSessionHistoryDirection.outgoing,
+      ),
     );
   }
 
@@ -589,9 +714,26 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
 
     try {
       final envelope = PeerTransportEnvelope.decodeTransportString(rawMessage);
+      if (envelope.kind == PeerTransportEnvelopeKind.typing) {
+        _handleRemoteTypingEnvelope(envelope);
+        return;
+      }
+      if (envelope.kind == PeerTransportEnvelopeKind.receipt) {
+        await _handleReceiptEnvelope(envelope);
+        return;
+      }
+
+      final payload = envelope.payload;
+      final messageId = envelope.messageId;
+      if (payload == null || messageId == null) {
+        throw const FormatException(
+          'Incoming peer message is missing encrypted content.',
+        );
+      }
+
       final messageService = await _loadMessageService();
       final body = await messageService.decryptFromTransport(
-        payload: envelope.payload,
+        payload: payload,
         sharedSecret: sharedSecret,
       );
 
@@ -605,7 +747,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
 
       await messageService.saveInboundMessage(
         Message(
-          id: envelope.messageId,
+          id: messageId,
           conversationId: conversationId,
           senderId: envelope.senderFingerprint,
           body: body,
@@ -613,15 +755,17 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
           deliveryState: MessageDeliveryState.delivered,
           createdAt: envelope.createdAt,
           isOutgoing: false,
-          burnAfterRead: envelope.burnAfterRead,
+          burnAfterRead: envelope.burnAfterRead ?? true,
           expiresAt: envelope.expiresAt,
         ),
       );
+      await _sendDeliveryReceipt(messageId);
       _refreshConversation(conversationId);
 
       state = state.copyWith(
         remoteFingerprint: envelope.senderFingerprint,
         conversationId: conversationId,
+        isRemoteTyping: false,
         lastEvent: 'Secure message received.',
       );
     } catch (error) {
@@ -655,6 +799,13 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     }
 
     var nextState = state.copyWith(connectionState: connectionState);
+    if (connectionState != WebRtcSessionState.open) {
+      _localTypingTimer?.cancel();
+      _remoteTypingTimer?.cancel();
+      _localTypingActive = false;
+      nextState = nextState.copyWith(isRemoteTyping: false);
+    }
+
     if (connectionState == WebRtcSessionState.open) {
       nextState = nextState.copyWith(
         lastEvent: 'Secure data channel is open. Peer messaging is live.',
@@ -689,6 +840,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     String? detail,
     PeerSessionHistoryDirection direction = PeerSessionHistoryDirection.system,
     DateTime? occurredAt,
+    PeerSessionHistoryAction? action,
   }) {
     final next = <PeerSessionHistoryEntry>[
       PeerSessionHistoryEntry(
@@ -696,6 +848,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         detail: detail,
         direction: direction,
         occurredAt: occurredAt ?? DateTime.now(),
+        action: action,
       ),
       ...state.history,
     ];
@@ -707,6 +860,136 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     state = state.copyWith(
       history: List<PeerSessionHistoryEntry>.unmodifiable(next),
     );
+  }
+
+  PeerSessionHistoryAction _signalHistoryAction({
+    required SignalingEnvelopeType type,
+    required String payload,
+    required PeerSessionHistoryDirection direction,
+  }) {
+    final signalLabel = switch (type) {
+      SignalingEnvelopeType.offer => 'Offer',
+      SignalingEnvelopeType.answer => 'Answer',
+      SignalingEnvelopeType.iceCandidate => 'ICE',
+    };
+
+    return PeerSessionHistoryAction(
+      kind: direction == PeerSessionHistoryDirection.incoming
+          ? PeerSessionHistoryActionKind.apply
+          : PeerSessionHistoryActionKind.copy,
+      label: direction == PeerSessionHistoryDirection.incoming
+          ? 'Apply $signalLabel Again'
+          : 'Copy $signalLabel',
+      payload: payload,
+    );
+  }
+
+  void _handleRemoteTypingEnvelope(PeerTransportEnvelope envelope) {
+    final isTyping = envelope.isTyping ?? false;
+    final conversationId = state.conversationId ??
+        conversationIdForFingerprint(envelope.senderFingerprint);
+
+    _remoteTypingTimer?.cancel();
+    state = state.copyWith(
+      remoteFingerprint: envelope.senderFingerprint,
+      conversationId: conversationId,
+      isRemoteTyping: isTyping,
+    );
+
+    if (!isTyping) {
+      return;
+    }
+
+    _remoteTypingTimer = Timer(const Duration(seconds: 4), () {
+      state = state.copyWith(isRemoteTyping: false);
+    });
+  }
+
+  Future<void> _handleReceiptEnvelope(PeerTransportEnvelope envelope) async {
+    final messageId = envelope.messageId;
+    final receiptState = envelope.receiptState;
+    if (messageId == null || receiptState == null) {
+      throw const FormatException(
+        'Incoming delivery receipt is missing receipt metadata.',
+      );
+    }
+
+    final conversationId = state.conversationId ??
+        conversationIdForFingerprint(envelope.senderFingerprint);
+    final messageService = await _loadMessageService();
+    await messageService.updateDeliveryState(messageId, receiptState);
+    _refreshConversation(conversationId);
+
+    state = state.copyWith(
+      remoteFingerprint: envelope.senderFingerprint,
+      conversationId: conversationId,
+      lastEvent: switch (receiptState) {
+        MessageDeliveryState.read => 'Peer read a secure message.',
+        MessageDeliveryState.delivered => 'Peer received a secure message.',
+        _ => 'Peer confirmed a secure message update.',
+      },
+    );
+  }
+
+  Future<void> _sendTypingStatus(bool isTyping) async {
+    if (!state.isTransportReady) {
+      _localTypingActive = false;
+      return;
+    }
+
+    final identity = await _ensureLocalIdentity();
+    _localTypingActive = isTyping;
+
+    try {
+      await _webRtcManager.sendText(
+        PeerTransportEnvelope.typing(
+          senderFingerprint: identity.fingerprint,
+          createdAt: DateTime.now(),
+          isTyping: isTyping,
+        ).encodeTransportString(),
+      );
+    } catch (error, stackTrace) {
+      _localTypingActive = false;
+      debugPrint('Typing update failed: $error\n$stackTrace');
+    }
+  }
+
+  Future<void> _sendDeliveryReceipt(String messageId) async {
+    await _sendReceipt(
+      messageId: messageId,
+      receiptState: MessageDeliveryState.delivered,
+    );
+  }
+
+  Future<void> _sendReadReceipt(String messageId) async {
+    await _sendReceipt(
+      messageId: messageId,
+      receiptState: MessageDeliveryState.read,
+    );
+  }
+
+  Future<void> _sendReceipt({
+    required String messageId,
+    required MessageDeliveryState receiptState,
+  }) async {
+    if (!state.isTransportReady) {
+      return;
+    }
+
+    final identity = await _ensureLocalIdentity();
+
+    try {
+      await _webRtcManager.sendText(
+        PeerTransportEnvelope.receipt(
+          messageId: messageId,
+          senderFingerprint: identity.fingerprint,
+          createdAt: DateTime.now(),
+          receiptState: receiptState,
+        ).encodeTransportString(),
+      );
+    } catch (error, stackTrace) {
+      debugPrint('Receipt send failed: $error\n$stackTrace');
+    }
   }
 
   Map<String, dynamic> _descriptionPayload(
@@ -768,39 +1051,107 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   }
 }
 
+enum PeerTransportEnvelopeKind {
+  message,
+  typing,
+  receipt,
+}
+
 @immutable
 class PeerTransportEnvelope {
-  const PeerTransportEnvelope({
+  const PeerTransportEnvelope.message({
     required this.messageId,
     required this.senderFingerprint,
     required this.payload,
     required this.createdAt,
     required this.burnAfterRead,
     this.expiresAt,
-  });
+  })  : kind = PeerTransportEnvelopeKind.message,
+        isTyping = null,
+        receiptState = null;
 
-  final String messageId;
+  const PeerTransportEnvelope.typing({
+    required this.senderFingerprint,
+    required this.createdAt,
+    required this.isTyping,
+  })  : kind = PeerTransportEnvelopeKind.typing,
+        receiptState = null,
+        messageId = null,
+        payload = null,
+        burnAfterRead = null,
+        expiresAt = null;
+
+  const PeerTransportEnvelope.receipt({
+    required this.messageId,
+    required this.senderFingerprint,
+    required this.createdAt,
+    required this.receiptState,
+  })  : kind = PeerTransportEnvelopeKind.receipt,
+        isTyping = null,
+        payload = null,
+        burnAfterRead = null,
+        expiresAt = null;
+
+  final PeerTransportEnvelopeKind kind;
+  final String? messageId;
   final String senderFingerprint;
-  final EncryptedPayload payload;
+  final EncryptedPayload? payload;
   final DateTime createdAt;
-  final bool burnAfterRead;
+  final bool? burnAfterRead;
   final DateTime? expiresAt;
+  final bool? isTyping;
+  final MessageDeliveryState? receiptState;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
-      'messageId': messageId,
+      'kind': kind.name,
       'senderFingerprint': senderFingerprint,
-      'payload': payload.toJson(),
       'createdAt': createdAt.toIso8601String(),
-      'burnAfterRead': burnAfterRead,
-      'expiresAt': expiresAt?.toIso8601String(),
+      if (kind == PeerTransportEnvelopeKind.message) ...<String, dynamic>{
+        'messageId': messageId,
+        'payload': payload!.toJson(),
+        'burnAfterRead': burnAfterRead,
+        'expiresAt': expiresAt?.toIso8601String(),
+      } else if (kind == PeerTransportEnvelopeKind.typing) ...<String, dynamic>{
+        'isTyping': isTyping,
+      } else ...<String, dynamic>{
+        'messageId': messageId,
+        'receiptState': receiptState!.name,
+      },
     };
   }
 
   String encodeTransportString() => jsonEncode(toJson());
 
   factory PeerTransportEnvelope.fromJson(Map<String, dynamic> json) {
-    return PeerTransportEnvelope(
+    final kind = switch (json['kind'] as String?) {
+      'typing' => PeerTransportEnvelopeKind.typing,
+      'receipt' => PeerTransportEnvelopeKind.receipt,
+      _ => PeerTransportEnvelopeKind.message,
+    };
+
+    if (kind == PeerTransportEnvelopeKind.typing) {
+      return PeerTransportEnvelope.typing(
+        senderFingerprint: json['senderFingerprint'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        isTyping: json['isTyping'] as bool? ?? false,
+      );
+    }
+
+    if (kind == PeerTransportEnvelopeKind.receipt) {
+      return PeerTransportEnvelope.receipt(
+        messageId: json['messageId'] as String,
+        senderFingerprint: json['senderFingerprint'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        receiptState: json['receiptState'] == null
+            ? MessageDeliveryState.delivered
+            : MessageDeliveryState.values.byName(
+                json['receiptState'] as String,
+              ),
+      );
+    }
+
+    return PeerTransportEnvelope.message(
       messageId: json['messageId'] as String,
       senderFingerprint: json['senderFingerprint'] as String,
       payload: EncryptedPayload.fromJson(

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -9,6 +11,7 @@ class SettingsScreen extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final themeMode = ref.watch(themeModeProvider);
+    final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
 
     return SafeArea(
       child: ListView(
@@ -62,6 +65,22 @@ class SettingsScreen extends ConsumerWidget {
               title: const Text('Screenshot protection'),
               subtitle: const Text(
                 'Android now enables secure windows. iOS and desktop recording detection still need platform-specific follow-up.',
+              ),
+            ),
+          ),
+          Card(
+            child: SwitchListTile.adaptive(
+              value: readReceiptsEnabled,
+              onChanged: (value) {
+                unawaited(
+                  ref
+                      .read(readReceiptsEnabledProvider.notifier)
+                      .setEnabled(value),
+                );
+              },
+              title: const Text('Read receipts'),
+              subtitle: const Text(
+                'Opt in to send encrypted read confirmations when you open a conversation and view delivered messages.',
               ),
             ),
           ),

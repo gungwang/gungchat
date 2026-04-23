@@ -22,6 +22,7 @@ import '../features/contacts/contact_book_controller.dart';
 import '../features/contacts/contact_book_storage.dart';
 import '../features/contacts/contact_exchange_service.dart';
 import '../features/contacts/discovery_service.dart';
+import '../features/settings/read_receipt_preferences.dart';
 import '../models/contact.dart';
 import '../models/message.dart';
 
@@ -35,6 +36,16 @@ final pendingPeerInputProvider =
   StateProvider<PendingPeerInput?>((ref) => null);
 final pendingPeerConnectIntentProvider =
   StateProvider<PeerConnectIntent?>((ref) => null);
+final readReceiptPreferencesStorageProvider =
+    Provider<ReadReceiptPreferencesStorage>((ref) {
+  return const ReadReceiptPreferencesStorage();
+});
+final readReceiptsEnabledProvider =
+    StateNotifierProvider<ReadReceiptsPreferenceController, bool>((ref) {
+  return ReadReceiptsPreferenceController(
+    storage: ref.watch(readReceiptPreferencesStorageProvider),
+  );
+});
 
 final secureStorageProvider = Provider<AppSecureStorage>((ref) {
   return AppSecureStorage();
