@@ -12,6 +12,7 @@ import '../core/storage/secure_storage.dart';
 import '../features/chat/ephemeral_manager.dart';
 import '../features/chat/peer_connect_intent.dart';
 import '../features/chat/peer_invitation_builder.dart';
+import '../features/chat/peer_invitation_parser.dart';
 import '../features/chat/message_service.dart';
 import '../features/chat/peer_session_controller.dart';
 import '../features/contacts/contact_book_controller.dart';
@@ -113,6 +114,10 @@ final peerSessionControllerProvider =
 
 final peerInvitationBuilderProvider = Provider<PeerInvitationBuilder>((ref) {
   return const PeerInvitationBuilder();
+});
+
+final peerInvitationParserProvider = Provider<PeerInvitationParser>((ref) {
+  return const PeerInvitationParser();
 });
 
 final contactExchangeServiceProvider = Provider<ContactExchangeService>((ref) {

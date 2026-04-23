@@ -13,6 +13,7 @@ import '../../models/message.dart';
 import '../contacts/discovery_service.dart';
 import 'peer_connect_intent.dart';
 import 'peer_invitation_builder.dart';
+import 'peer_invitation_parser.dart';
 import 'peer_session_controller.dart';
 import 'widgets/message_bubble.dart';
 
@@ -149,6 +150,118 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _applyImportedText(Contact? selectedContact) async {
+    final rawValue = _signalController.text.trim();
+    if (rawValue.isEmpty) {
+      return;
+    }
+
+    final parser = ref.read(peerInvitationParserProvider);
+    ParsedPeerInvitation? parsedInvitation;
+
+    try {
+      parsedInvitation = parser.parse(rawValue);
+    } on FormatException {
+      parsedInvitation = null;
+    }
+
+    if (parsedInvitation == null) {
+      await ref.read(peerSessionControllerProvider.notifier).applyRemoteSignal(
+            rawValue,
+            targetContact: selectedContact,
+          );
+      if (mounted &&
+          ref.read(peerSessionControllerProvider).lastError == null) {
+        _signalController.clear();
+      }
+      return;
+    }
+
+    Contact? targetContact = selectedContact;
+    final importedContact = parsedInvitation.toContact();
+    if (importedContact != null) {
+      ref.read(contactBookProvider.notifier).addOrUpdate(importedContact);
+      ref.read(selectedContactFingerprintProvider.notifier).state =
+          importedContact.fingerprint;
+      targetContact = importedContact;
+    }
+
+    final controller = ref.read(peerSessionControllerProvider.notifier);
+    switch (parsedInvitation.kind) {
+      case PeerInvitationKind.invite:
+        final offerSignal = parsedInvitation.offerSignal;
+        if (offerSignal == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This invite does not contain an offer payload.'),
+              ),
+            );
+          }
+          return;
+        }
+
+        await controller.applyRemoteSignal(
+          offerSignal,
+          targetContact: targetContact,
+        );
+        for (final iceSignal in parsedInvitation.iceSignals) {
+          await controller.applyRemoteSignal(
+            iceSignal,
+            targetContact: targetContact,
+          );
+        }
+
+        if (mounted &&
+            ref.read(peerSessionControllerProvider).lastError == null) {
+          _signalController.clear();
+          final contactLabel = targetContact?.displayName ?? 'peer';
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'Invite imported for $contactLabel. Copy the reply bundle back to the sender.',
+              ),
+            ),
+          );
+        }
+      case PeerInvitationKind.reply:
+        final answerSignal = parsedInvitation.answerSignal;
+        if (answerSignal == null) {
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              const SnackBar(
+                content: Text('This reply does not contain an answer payload.'),
+              ),
+            );
+          }
+          return;
+        }
+
+        await controller.applyRemoteSignal(
+          answerSignal,
+          targetContact: targetContact,
+        );
+        for (final iceSignal in parsedInvitation.iceSignals) {
+          await controller.applyRemoteSignal(
+            iceSignal,
+            targetContact: targetContact,
+          );
+        }
+
+        if (mounted &&
+            ref.read(peerSessionControllerProvider).lastError == null) {
+          _signalController.clear();
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(
+              content: Text(
+                'Reply imported. The secure channel should finish connecting once ICE exchange completes.',
+              ),
+            ),
+          );
+        }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     ref.listen<PeerConnectIntent?>(pendingPeerConnectIntentProvider,
@@ -207,7 +320,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Text('GungChat Bootstrap', style: theme.textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
-              'Manual signaling is now tied into saved contacts and QR/LAN exchange.',
+              'Invite import, saved contacts, and manual signaling now feed the same peer session flow.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -254,20 +367,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     .startOffer(targetContact: selectedContact);
               },
               onApplySignal: () async {
-                final signal = _signalController.text.trim();
-                if (signal.isEmpty) {
-                  return;
-                }
-                await ref
-                    .read(peerSessionControllerProvider.notifier)
-                    .applyRemoteSignal(
-                      signal,
-                      targetContact: selectedContact,
-                    );
-                if (mounted &&
-                    ref.read(peerSessionControllerProvider).lastError == null) {
-                  _signalController.clear();
-                }
+                await _applyImportedText(selectedContact);
               },
               onReset: () async {
                 await ref
@@ -287,10 +387,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       );
                     },
               onCopyInvitation: invitationDraft == null ||
-                      !invitationDraft.hasOffer
+                      !invitationDraft.hasReadyBundle
                   ? null
                   : () => _copyText(
-                        'Connection invite',
+                        invitationDraft.copyActionLabel,
                         invitationDraft.clipboardText,
                       ),
             ),
@@ -547,6 +647,8 @@ class _PeerSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final showConnectAction = invitationDraft == null ||
+        invitationDraft!.kind != PeerInvitationDraftKind.reply;
 
     return Card(
       child: ExpansionTile(
@@ -590,20 +692,22 @@ class _PeerSessionCard extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        FilledButton.icon(
-                          onPressed: onConnect,
-                          icon: const Icon(Icons.wifi_tethering_outlined),
-                          label: Text(
-                            invitationDraft!.hasOffer
-                                ? 'Refresh Offer'
-                                : 'Connect',
+                        if (showConnectAction)
+                          FilledButton.icon(
+                            onPressed: onConnect,
+                            icon: const Icon(Icons.wifi_tethering_outlined),
+                            label: Text(
+                              invitationDraft!.kind ==
+                                      PeerInvitationDraftKind.connect
+                                  ? 'Connect'
+                                  : 'Refresh Offer',
+                            ),
                           ),
-                        ),
                         if (onCopyInvitation != null)
                           FilledButton.tonalIcon(
                             onPressed: onCopyInvitation,
                             icon: const Icon(Icons.copy_all_outlined),
-                            label: const Text('Copy Invite'),
+                            label: Text(invitationDraft!.copyActionLabel),
                           ),
                       ],
                     ),
@@ -648,9 +752,14 @@ class _PeerSessionCard extends StatelessWidget {
             maxLines: 5,
             minLines: 3,
             decoration: const InputDecoration(
-              labelText: 'Paste remote answer, offer, or ICE payload',
+              labelText: 'Paste invite, reply, offer, answer, or ICE payload',
               border: OutlineInputBorder(),
             ),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            'This field accepts full GungChat invite or reply text as well as raw signaling payloads.',
+            style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
           Row(
@@ -676,7 +785,7 @@ class _PeerSessionCard extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.download_outlined),
-                  label: const Text('Apply Signal'),
+                  label: const Text('Apply Input'),
                 ),
               ),
               const SizedBox(width: 12),
@@ -754,6 +863,9 @@ class _PeerSessionCard extends StatelessWidget {
       return 'Secure channel open';
     }
     if (sessionState.isSessionActive) {
+      if (sessionState.role == PeerSessionRole.responder) {
+        return 'Invite imported. Copy the reply bundle or continue exchanging raw answer and ICE payloads.';
+      }
       return 'Exchange offer, answer, and ICE payloads';
     }
     if (selectedContact != null) {
