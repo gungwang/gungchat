@@ -178,7 +178,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               onStartOffer: () async {
                 await ref
                     .read(peerSessionControllerProvider.notifier)
-                    .startOffer();
+                    .startOffer(targetContact: selectedContact);
               },
               onApplySignal: () async {
                 final signal = _signalController.text.trim();
@@ -187,7 +187,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 }
                 await ref
                     .read(peerSessionControllerProvider.notifier)
-                    .applyRemoteSignal(signal);
+                    .applyRemoteSignal(
+                      signal,
+                      targetContact: selectedContact,
+                    );
                 if (mounted &&
                     ref.read(peerSessionControllerProvider).lastError == null) {
                   _signalController.clear();
@@ -461,6 +464,8 @@ class _PeerSessionCard extends StatelessWidget {
               children: [
                 if (selectedContact != null)
                   Chip(label: Text('Target ${selectedContact!.displayName}')),
+                if (sessionState.targetAddress != null)
+                  Chip(label: Text(sessionState.targetAddress!)),
                 if (sessionState.role != null)
                   Chip(
                     label: Text(
@@ -537,6 +542,14 @@ class _PeerSessionCard extends StatelessWidget {
             Text(
               sessionState.lastEvent!,
               style: theme.textTheme.bodyMedium,
+            ),
+          ],
+          if (sessionState.expectedRemoteFingerprint != null &&
+              sessionState.remoteFingerprint == null) ...[
+            const SizedBox(height: 8),
+            Text(
+              'Expected fingerprint: ${sessionState.expectedRemoteFingerprint}',
+              style: theme.textTheme.bodySmall,
             ),
           ],
           if (sessionState.sessionId != null) ...[

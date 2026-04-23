@@ -62,6 +62,9 @@ class PeerSessionState {
     this.lastError,
     this.lastEvent,
     this.pendingRemoteIceCount = 0,
+    this.expectedRemoteFingerprint,
+    this.targetDisplayName,
+    this.targetAddress,
   });
 
   final String? sessionId;
@@ -75,6 +78,9 @@ class PeerSessionState {
   final String? lastError;
   final String? lastEvent;
   final int pendingRemoteIceCount;
+  final String? expectedRemoteFingerprint;
+  final String? targetDisplayName;
+  final String? targetAddress;
 
   bool get isSessionActive => sessionId != null;
 
@@ -95,6 +101,9 @@ class PeerSessionState {
     Object? lastError = _sentinel,
     Object? lastEvent = _sentinel,
     int? pendingRemoteIceCount,
+    Object? expectedRemoteFingerprint = _sentinel,
+    Object? targetDisplayName = _sentinel,
+    Object? targetAddress = _sentinel,
   }) {
     return PeerSessionState(
       sessionId: identical(sessionId, _sentinel)
@@ -119,6 +128,15 @@ class PeerSessionState {
           : lastEvent as String?,
       pendingRemoteIceCount:
           pendingRemoteIceCount ?? this.pendingRemoteIceCount,
+      expectedRemoteFingerprint: identical(expectedRemoteFingerprint, _sentinel)
+          ? this.expectedRemoteFingerprint
+          : expectedRemoteFingerprint as String?,
+      targetDisplayName: identical(targetDisplayName, _sentinel)
+          ? this.targetDisplayName
+          : targetDisplayName as String?,
+      targetAddress: identical(targetAddress, _sentinel)
+          ? this.targetAddress
+          : targetAddress as String?,
     );
   }
 }
@@ -159,7 +177,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   bool _hasRemoteDescription = false;
   final List<RTCIceCandidate> _pendingRemoteIceCandidates = [];
 
-  Future<void> startOffer() async {
+  Future<void> startOffer({Contact? targetContact}) async {
     final identity = await _ensureLocalIdentity();
     final sessionId = _uuid.v4();
 
@@ -167,7 +185,12 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       sessionId: sessionId,
       role: PeerSessionRole.initiator,
       connectionState: WebRtcSessionState.connecting,
-      lastEvent: 'Offer is being prepared for manual sharing.',
+      expectedRemoteFingerprint: targetContact?.fingerprint,
+      targetDisplayName: targetContact?.displayName,
+      targetAddress: targetContact?.lastKnownAddress,
+      lastEvent: targetContact == null
+          ? 'Offer is being prepared for manual sharing.'
+          : 'Offer is being prepared for ${targetContact.displayName}.',
     );
 
     try {
@@ -182,22 +205,31 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         ),
       );
       state = state.copyWith(
-        lastEvent:
-            'Offer ready. Share it with your peer, then paste the answer and ICE payloads here.',
+        lastEvent: targetContact == null
+            ? 'Offer ready. Share it with your peer, then paste the answer and ICE payloads here.'
+            : 'Offer ready for ${targetContact.displayName}. Share it through the selected contact channel, then paste the answer and ICE payloads here.',
       );
     } catch (error) {
       _setError('Could not start an offer: $error');
     }
   }
 
-  Future<void> applyRemoteSignal(String rawValue) async {
+  Future<void> applyRemoteSignal(String rawValue,
+      {Contact? targetContact}) async {
     final trimmed = rawValue.trim();
     if (trimmed.isEmpty) {
       _setError('Paste an offer, answer, or ICE payload before applying it.');
       return;
     }
 
-    state = state.copyWith(isApplyingSignal: true, lastError: null);
+    state = state.copyWith(
+      isApplyingSignal: true,
+      lastError: null,
+      expectedRemoteFingerprint:
+          targetContact?.fingerprint ?? state.expectedRemoteFingerprint,
+      targetDisplayName: targetContact?.displayName ?? state.targetDisplayName,
+      targetAddress: targetContact?.lastKnownAddress ?? state.targetAddress,
+    );
 
     try {
       final envelope = _signalingService.decode(trimmed);
@@ -301,7 +333,12 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         sessionId: envelope.sessionId,
         role: PeerSessionRole.responder,
         connectionState: WebRtcSessionState.connecting,
-        lastEvent: 'Remote offer loaded. Preparing an answer.',
+        expectedRemoteFingerprint: state.expectedRemoteFingerprint,
+        targetDisplayName: state.targetDisplayName,
+        targetAddress: state.targetAddress,
+        lastEvent: state.targetDisplayName == null
+            ? 'Remote offer loaded. Preparing an answer.'
+            : 'Remote offer loaded for ${state.targetDisplayName}. Preparing an answer.',
       );
       await _configureTransport(initiator: false);
     }
@@ -416,6 +453,14 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   }) async {
     final remotePublicKey = _remotePublicKeyFromPayload(payload);
     final remoteFingerprint = await _fingerprintForPublicKey(remotePublicKey);
+    final expectedRemoteFingerprint = state.expectedRemoteFingerprint;
+
+    if (expectedRemoteFingerprint != null &&
+        expectedRemoteFingerprint != remoteFingerprint) {
+      throw StateError(
+        'Remote fingerprint $remoteFingerprint does not match the selected contact $expectedRemoteFingerprint.',
+      );
+    }
 
     _sharedSecret = await _cryptoService.deriveSharedSecret(
       localPrivateKey: localIdentity.privateKey,
@@ -428,6 +473,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       conversationId: conversationIdForFingerprint(remoteFingerprint),
       hasSharedSecret: true,
       lastError: null,
+      expectedRemoteFingerprint: remoteFingerprint,
     );
   }
 

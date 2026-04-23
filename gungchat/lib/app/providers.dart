@@ -13,6 +13,7 @@ import '../features/chat/ephemeral_manager.dart';
 import '../features/chat/message_service.dart';
 import '../features/chat/peer_session_controller.dart';
 import '../features/contacts/contact_book_controller.dart';
+import '../features/contacts/contact_book_storage.dart';
 import '../features/contacts/contact_exchange_service.dart';
 import '../features/contacts/discovery_service.dart';
 import '../models/contact.dart';
@@ -110,6 +111,10 @@ final contactExchangeServiceProvider = Provider<ContactExchangeService>((ref) {
   return const ContactExchangeService();
 });
 
+final contactBookStorageProvider = Provider<ContactBookStorage>((ref) {
+  return const ContactBookStorage();
+});
+
 final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
   return DiscoveryService(
     contactExchangeService: ref.watch(contactExchangeServiceProvider),
@@ -118,7 +123,9 @@ final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
 
 final contactBookProvider =
     StateNotifierProvider<ContactBookController, List<Contact>>((ref) {
-  return ContactBookController();
+  return ContactBookController(
+    storage: ref.watch(contactBookStorageProvider),
+  );
 });
 
 final selectedContactProvider = Provider<Contact?>((ref) {

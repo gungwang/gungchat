@@ -30,6 +30,36 @@ class Contact {
   final bool isLanDiscovered;
   final String? note;
 
+  Map<String, dynamic> toJson() {
+    return <String, dynamic>{
+      'id': id,
+      'displayName': displayName,
+      'fingerprint': fingerprint,
+      'lastKnownAddress': lastKnownAddress,
+      'lastSeenAt': lastSeenAt?.toIso8601String(),
+      'trustLevel': trustLevel.name,
+      'isLanDiscovered': isLanDiscovered,
+      'note': note,
+    };
+  }
+
+  factory Contact.fromJson(Map<String, dynamic> json) {
+    return Contact(
+      id: json['id'] as String,
+      displayName: json['displayName'] as String,
+      fingerprint: json['fingerprint'] as String,
+      lastKnownAddress: json['lastKnownAddress'] as String?,
+      lastSeenAt: json['lastSeenAt'] == null
+          ? null
+          : DateTime.parse(json['lastSeenAt'] as String),
+      trustLevel: ContactTrustLevel.values.byName(
+        json['trustLevel'] as String? ?? ContactTrustLevel.unknown.name,
+      ),
+      isLanDiscovered: json['isLanDiscovered'] as bool? ?? false,
+      note: json['note'] as String?,
+    );
+  }
+
   Contact copyWith({
     String? id,
     String? displayName,
