@@ -6,7 +6,9 @@ import '../../app/providers.dart';
 import '../../core/encryption/key_manager.dart';
 import '../../core/networking/network_monitor.dart';
 import '../../core/networking/webrtc_manager.dart';
+import '../../models/contact.dart';
 import '../../models/message.dart';
+import '../contacts/discovery_service.dart';
 import 'peer_session_controller.dart';
 import 'widgets/message_bubble.dart';
 
@@ -30,7 +32,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     super.dispose();
   }
 
-  Future<void> _sendMessage(DeviceIdentity identity) async {
+  Future<void> _copyText(String label, String value) async {
+    await Clipboard.setData(ClipboardData(text: value));
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('$label copied')),
+      );
+    }
+  }
+
+  Future<void> _sendMessage(
+      DeviceIdentity identity, Contact? selectedContact) async {
     final text = _composerController.text.trim();
     if (text.isEmpty || _sending) {
       return;
@@ -43,6 +55,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         const SnackBar(
           content:
               Text('Finish the signal exchange before sending peer messages.'),
+        ),
+      );
+      return;
+    }
+
+    if (selectedContact != null && !peerSession.isTransportReady) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Open or answer a session with ${selectedContact.displayName} before sending.',
+          ),
         ),
       );
       return;
@@ -86,14 +109,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final identityAsync = ref.watch(deviceIdentityProvider);
     final networkAsync = ref.watch(networkStatusProvider);
     final peerSession = ref.watch(peerSessionControllerProvider);
-    final activeConversationId =
-        peerSession.conversationId ?? bootstrapConversationId;
+    final savedContacts = ref.watch(contactBookProvider);
+    final selectedContact = ref.watch(selectedContactProvider);
+
+    final selectedConversationId = selectedContact == null
+        ? null
+        : conversationIdForFingerprint(selectedContact.fingerprint);
+    final activeConversationId = peerSession.conversationId ??
+        selectedConversationId ??
+        bootstrapConversationId;
+
     final messagesAsync = ref.watch(
       conversationMessagesProvider(activeConversationId),
     );
     final canSendSecure = peerSession.isTransportReady;
-    final canSaveLocal = !peerSession.isSessionActive;
+    final canSaveLocal =
+        selectedContact == null && !peerSession.isSessionActive;
     final composerEnabled = canSendSecure || canSaveLocal;
+    final selectedUri = selectedContact?.lastKnownAddress == null
+        ? null
+        : ref.read(discoveryServiceProvider).buildManualConnectionUri(
+              host: selectedContact!.lastKnownAddress!.split(':').first,
+              port: int.tryParse(
+                    selectedContact.lastKnownAddress!.split(':').last,
+                  ) ??
+                  DiscoveryService.discoveryPort,
+              fingerprint: selectedContact.fingerprint,
+            );
 
     return SafeArea(
       child: Padding(
@@ -104,7 +146,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             Text('GungChat Bootstrap', style: theme.textTheme.headlineSmall),
             const SizedBox(height: 8),
             Text(
-              'Phase 1 now includes manual offer, answer, and ICE exchange for encrypted peer messaging.',
+              'Manual signaling is now tied into saved contacts and QR/LAN exchange.',
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
@@ -112,8 +154,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             const SizedBox(height: 12),
             _NetworkCard(networkAsync: networkAsync),
             const SizedBox(height: 12),
+            _ContactTargetCard(
+              contacts: savedContacts,
+              selectedContact: selectedContact,
+              selectedUri: selectedUri?.toString(),
+              onSelectContact: (fingerprint) {
+                ref.read(selectedContactFingerprintProvider.notifier).state =
+                    fingerprint;
+              },
+              onClearSelection: () {
+                ref.read(selectedContactFingerprintProvider.notifier).state =
+                    null;
+              },
+              onCopyUri: selectedUri == null
+                  ? null
+                  : () => _copyText('Manual URI', selectedUri.toString()),
+            ),
+            const SizedBox(height: 12),
             _PeerSessionCard(
               sessionState: peerSession,
+              selectedContact: selectedContact,
               signalController: _signalController,
               onStartOffer: () async {
                 await ref
@@ -152,9 +212,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       if (messages.isEmpty) {
                         return Center(
                           child: Text(
-                            peerSession.conversationId == null
-                                ? 'No messages yet. Save a local bootstrap message or complete a manual peer session.'
-                                : 'No peer messages yet. Once the secure channel opens, your conversation will appear here.',
+                            selectedContact == null &&
+                                    peerSession.conversationId == null
+                                ? 'No messages yet. Save a local bootstrap message or select a peer contact.'
+                                : 'No messages yet for this peer. Finish signaling to start the secure conversation.',
                             style: theme.textTheme.bodyMedium,
                             textAlign: TextAlign.center,
                           ),
@@ -188,9 +249,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     Text(
                       canSendSecure
                           ? 'Conversation: ${peerSession.remoteFingerprint ?? activeConversationId}'
-                          : canSaveLocal
-                              ? 'Conversation: local bootstrap cache'
-                              : 'Conversation: waiting for secure channel',
+                          : selectedContact != null
+                              ? 'Conversation: ${selectedContact.displayName}'
+                              : canSaveLocal
+                                  ? 'Conversation: local bootstrap cache'
+                                  : 'Conversation: waiting for secure channel',
                       style: theme.textTheme.labelLarge,
                     ),
                     const SizedBox(height: 12),
@@ -204,7 +267,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               _sending ||
                               !composerEnabled
                           ? null
-                          : (_) => _sendMessage(identityAsync.requireValue),
+                          : (_) => _sendMessage(
+                                identityAsync.requireValue,
+                                selectedContact,
+                              ),
                       decoration: InputDecoration(
                         labelText: canSendSecure
                             ? 'Secure peer message'
@@ -215,7 +281,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             ? 'Type an encrypted message for the active peer session...'
                             : canSaveLocal
                                 ? 'Type a local encrypted message draft...'
-                                : 'Complete the signal exchange to enable the secure composer.',
+                                : 'Select a peer and complete the signal exchange to enable sending.',
                         border: const OutlineInputBorder(),
                       ),
                     ),
@@ -242,7 +308,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 _sending ||
                                 !composerEnabled
                             ? null
-                            : () => _sendMessage(identityAsync.requireValue),
+                            : () => _sendMessage(
+                                  identityAsync.requireValue,
+                                  selectedContact,
+                                ),
                         icon: _sending
                             ? const SizedBox(
                                 width: 18,
@@ -275,6 +344,84 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 }
 
+class _ContactTargetCard extends StatelessWidget {
+  const _ContactTargetCard({
+    required this.contacts,
+    required this.selectedContact,
+    required this.onSelectContact,
+    required this.onClearSelection,
+    this.selectedUri,
+    this.onCopyUri,
+  });
+
+  final List<Contact> contacts;
+  final Contact? selectedContact;
+  final ValueChanged<String> onSelectContact;
+  final VoidCallback onClearSelection;
+  final String? selectedUri;
+  final VoidCallback? onCopyUri;
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Chat Target', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 12),
+            if (contacts.isEmpty)
+              const Text(
+                'No saved contacts yet. Import or discover a peer from the Contacts tab.',
+              )
+            else
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final contact in contacts)
+                    ChoiceChip(
+                      label: Text(contact.displayName),
+                      selected:
+                          selectedContact?.fingerprint == contact.fingerprint,
+                      onSelected: (_) => onSelectContact(contact.fingerprint),
+                    ),
+                ],
+              ),
+            if (selectedContact != null) ...[
+              const SizedBox(height: 12),
+              Text(selectedContact!.fingerprint),
+              if (selectedContact!.lastKnownAddress != null) ...[
+                const SizedBox(height: 4),
+                Text(selectedContact!.lastKnownAddress!),
+              ],
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  if (onCopyUri != null && selectedUri != null)
+                    FilledButton.tonalIcon(
+                      onPressed: onCopyUri,
+                      icon: const Icon(Icons.link_outlined),
+                      label: const Text('Copy URI'),
+                    ),
+                  FilledButton.tonalIcon(
+                    onPressed: onClearSelection,
+                    icon: const Icon(Icons.clear_outlined),
+                    label: const Text('Clear'),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
 class _PeerSessionCard extends StatelessWidget {
   const _PeerSessionCard({
     required this.sessionState,
@@ -282,9 +429,11 @@ class _PeerSessionCard extends StatelessWidget {
     required this.onStartOffer,
     required this.onApplySignal,
     required this.onReset,
+    this.selectedContact,
   });
 
   final PeerSessionState sessionState;
+  final Contact? selectedContact;
   final TextEditingController signalController;
   final Future<void> Function() onStartOffer;
   final Future<void> Function() onApplySignal;
@@ -296,11 +445,12 @@ class _PeerSessionCard extends StatelessWidget {
 
     return Card(
       child: ExpansionTile(
-        initiallyExpanded: sessionState.isSessionActive,
+        initiallyExpanded:
+            sessionState.isSessionActive || selectedContact != null,
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
         title: const Text('Manual Peer Session'),
-        subtitle: Text(_subtitleForState(sessionState)),
+        subtitle: Text(_subtitleForState(sessionState, selectedContact)),
         trailing: _StateChip(state: sessionState),
         children: [
           Align(
@@ -309,6 +459,8 @@ class _PeerSessionCard extends StatelessWidget {
               spacing: 8,
               runSpacing: 8,
               children: [
+                if (selectedContact != null)
+                  Chip(label: Text('Target ${selectedContact!.displayName}')),
                 if (sessionState.role != null)
                   Chip(
                     label: Text(
@@ -422,14 +574,20 @@ class _PeerSessionCard extends StatelessWidget {
     );
   }
 
-  String _subtitleForState(PeerSessionState sessionState) {
+  String _subtitleForState(
+    PeerSessionState sessionState,
+    Contact? selectedContact,
+  ) {
     if (sessionState.isTransportReady) {
       return 'Secure channel open';
     }
     if (sessionState.isSessionActive) {
       return 'Exchange offer, answer, and ICE payloads';
     }
-    return 'Start an offer or paste a remote offer to answer manually';
+    if (selectedContact != null) {
+      return 'Selected ${selectedContact.displayName}. Start an offer or answer their signal.';
+    }
+    return 'Select a contact or paste a remote offer to answer manually';
   }
 }
 

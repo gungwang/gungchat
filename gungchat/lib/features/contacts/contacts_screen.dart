@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app/providers.dart';
 import '../../core/encryption/key_manager.dart';
 import '../../models/contact.dart';
 import 'contact_exchange_service.dart';
+import 'contact_qr_scanner_screen.dart';
 import 'discovery_service.dart';
 
 class ContactsScreen extends ConsumerStatefulWidget {
@@ -64,7 +66,22 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     }
   }
 
-  Future<void> _importContactPayload() async {
+  Future<void> _scanContactPayload() async {
+    final scannedValue = await Navigator.of(context).push<String>(
+      MaterialPageRoute(
+        builder: (context) => const ContactQrScannerScreen(),
+      ),
+    );
+
+    if (!mounted || scannedValue == null || scannedValue.isEmpty) {
+      return;
+    }
+
+    _importController.text = scannedValue;
+    await _importContactPayload(openInChat: true);
+  }
+
+  Future<void> _importContactPayload({bool openInChat = false}) async {
     final payload = _importController.text.trim();
     if (payload.isEmpty) {
       _showSnack('Paste a contact payload before importing it.');
@@ -74,46 +91,55 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     try {
       final contactCard =
           ref.read(contactExchangeServiceProvider).decodeContactCard(payload);
-      ref.read(contactBookProvider.notifier).addOrUpdate(
-            ref
-                .read(contactExchangeServiceProvider)
-                .contactFromCard(contactCard),
-          );
+      final contact =
+          ref.read(contactExchangeServiceProvider).contactFromCard(contactCard);
+      ref.read(contactBookProvider.notifier).addOrUpdate(contact);
       _importController.clear();
+      if (openInChat) {
+        _openContactInChat(contact.fingerprint);
+      }
       _showSnack('Contact imported: ${contactCard.displayName}');
     } catch (error) {
       _showSnack('Contact import failed: $error');
     }
   }
 
-  Future<void> _saveDiscoveredPeer(DiscoveryCandidate candidate) async {
+  Future<void> _saveDiscoveredPeer(
+    DiscoveryCandidate candidate, {
+    bool openInChat = false,
+  }) async {
     final exchangeService = ref.read(contactExchangeServiceProvider);
+    late final Contact contact;
 
     if (candidate.contactPayload != null) {
       final contactCard =
           exchangeService.decodeContactCard(candidate.contactPayload!);
-      ref.read(contactBookProvider.notifier).addOrUpdate(
-            exchangeService.contactFromCard(contactCard).copyWith(
-                  lastKnownAddress: '${candidate.host}:${candidate.port}',
-                  lastSeenAt: DateTime.now(),
-                  isLanDiscovered: true,
-                ),
+      contact = exchangeService.contactFromCard(contactCard).copyWith(
+            lastKnownAddress: '${candidate.host}:${candidate.port}',
+            lastSeenAt: DateTime.now(),
+            isLanDiscovered: true,
           );
     } else {
-      ref.read(contactBookProvider.notifier).addOrUpdate(
-            Contact(
-              id: candidate.fingerprint ??
-                  '${candidate.host}:${candidate.port}',
-              displayName: candidate.displayName,
-              fingerprint: candidate.fingerprint ?? 'unknown',
-              lastKnownAddress: '${candidate.host}:${candidate.port}',
-              lastSeenAt: DateTime.now(),
-              isLanDiscovered: true,
-            ),
-          );
+      contact = Contact(
+        id: candidate.fingerprint ?? '${candidate.host}:${candidate.port}',
+        displayName: candidate.displayName,
+        fingerprint: candidate.fingerprint ?? 'unknown',
+        lastKnownAddress: '${candidate.host}:${candidate.port}',
+        lastSeenAt: DateTime.now(),
+        isLanDiscovered: true,
+      );
     }
 
+    ref.read(contactBookProvider.notifier).addOrUpdate(contact);
+    if (openInChat) {
+      _openContactInChat(contact.fingerprint);
+    }
     _showSnack('Saved ${candidate.displayName}');
+  }
+
+  void _openContactInChat(String fingerprint) {
+    ref.read(selectedContactFingerprintProvider.notifier).state = fingerprint;
+    ref.read(navigationIndexProvider.notifier).state = 0;
   }
 
   Future<void> _copyText(String label, String value) async {
@@ -142,6 +168,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   Widget build(BuildContext context) {
     final identityAsync = ref.watch(deviceIdentityProvider);
     final savedContacts = ref.watch(contactBookProvider);
+    final selectedContact = ref.watch(selectedContactProvider);
     final theme = Theme.of(context);
 
     return SafeArea(
@@ -151,8 +178,24 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           Text('Discovery', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 8),
           const Text(
-            'Nearby LAN discovery and contact-card exchange are now wired for the next peer-connection loop.',
+            'Nearby LAN discovery, QR contact exchange, and direct handoff into chat are now wired together.',
           ),
+          if (selectedContact != null) ...[
+            const SizedBox(height: 16),
+            Card(
+              child: ListTile(
+                leading: const Icon(Icons.chat_bubble_outline),
+                title:
+                    Text('Active chat target: ${selectedContact.displayName}'),
+                subtitle: Text(selectedContact.fingerprint),
+                trailing: FilledButton.tonal(
+                  onPressed: () =>
+                      _openContactInChat(selectedContact.fingerprint),
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ],
           const SizedBox(height: 16),
           Card(
             child: Padding(
@@ -209,7 +252,31 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                                     ? 'No LAN addresses detected yet.'
                                     : 'LAN addresses: ${card.addresses.join(', ')}',
                               ),
-                              const SizedBox(height: 12),
+                              const SizedBox(height: 16),
+                              Center(
+                                child: DecoratedBox(
+                                  decoration: BoxDecoration(
+                                    color: Colors.white,
+                                    borderRadius: BorderRadius.circular(8),
+                                  ),
+                                  child: Padding(
+                                    padding: const EdgeInsets.all(12),
+                                    child: QrImageView(
+                                      data: payload,
+                                      version: QrVersions.auto,
+                                      size: 220,
+                                      eyeStyle: const QrEyeStyle(
+                                        eyeShape: QrEyeShape.square,
+                                      ),
+                                      dataModuleStyle: const QrDataModuleStyle(
+                                        dataModuleShape:
+                                            QrDataModuleShape.square,
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 16),
                               SelectableText(
                                 payload,
                                 style: theme.textTheme.bodySmall,
@@ -258,9 +325,20 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Import Contact',
-                    style: theme.textTheme.titleMedium,
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Text(
+                          'Import Contact',
+                          style: theme.textTheme.titleMedium,
+                        ),
+                      ),
+                      IconButton(
+                        tooltip: 'Scan contact QR',
+                        onPressed: _scanContactPayload,
+                        icon: const Icon(Icons.qr_code_scanner),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -274,13 +352,25 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                     ),
                   ),
                   const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: FilledButton.icon(
-                      onPressed: _importContactPayload,
-                      icon: const Icon(Icons.download_outlined),
-                      label: const Text('Import Contact'),
-                    ),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: FilledButton.icon(
+                          onPressed: _importContactPayload,
+                          icon: const Icon(Icons.download_outlined),
+                          label: const Text('Import Contact'),
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      Expanded(
+                        child: FilledButton.tonalIcon(
+                          onPressed: () =>
+                              _importContactPayload(openInChat: true),
+                          icon: const Icon(Icons.chat_bubble_outline),
+                          label: const Text('Import To Chat'),
+                        ),
+                      ),
+                    ],
                   ),
                 ],
               ),
@@ -333,6 +423,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                           _DiscoveryPeerTile(
                             candidate: peer,
                             onSave: () => _saveDiscoveredPeer(peer),
+                            onOpenInChat: () =>
+                                _saveDiscoveredPeer(peer, openInChat: true),
                             onCopyUri: () => _copyText(
                               'Manual URI',
                               ref
@@ -380,7 +472,13 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                     Column(
                       children: [
                         for (final contact in savedContacts) ...[
-                          _SavedContactTile(contact: contact),
+                          _SavedContactTile(
+                            contact: contact,
+                            isSelected: selectedContact?.fingerprint ==
+                                contact.fingerprint,
+                            onOpenChat: () =>
+                                _openContactInChat(contact.fingerprint),
+                          ),
                           if (contact != savedContacts.last)
                             const Divider(height: 24),
                         ],
@@ -400,12 +498,14 @@ class _DiscoveryPeerTile extends StatelessWidget {
   const _DiscoveryPeerTile({
     required this.candidate,
     required this.onSave,
+    required this.onOpenInChat,
     required this.onCopyUri,
     this.onCopyPayload,
   });
 
   final DiscoveryCandidate candidate;
   final VoidCallback onSave;
+  final VoidCallback onOpenInChat;
   final VoidCallback onCopyUri;
   final VoidCallback? onCopyPayload;
 
@@ -438,10 +538,15 @@ class _DiscoveryPeerTile extends StatelessWidget {
                 icon: const Icon(Icons.qr_code_2_outlined),
                 label: const Text('Copy Payload'),
               ),
-            FilledButton.icon(
+            FilledButton.tonalIcon(
               onPressed: onSave,
               icon: const Icon(Icons.person_add_alt_1_outlined),
-              label: const Text('Save Contact'),
+              label: const Text('Save'),
+            ),
+            FilledButton.icon(
+              onPressed: onOpenInChat,
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('Open In Chat'),
             ),
           ],
         ),
@@ -451,17 +556,32 @@ class _DiscoveryPeerTile extends StatelessWidget {
 }
 
 class _SavedContactTile extends StatelessWidget {
-  const _SavedContactTile({required this.contact});
+  const _SavedContactTile({
+    required this.contact,
+    required this.isSelected,
+    required this.onOpenChat,
+  });
 
   final Contact contact;
+  final bool isSelected;
+  final VoidCallback onOpenChat;
 
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(contact.displayName,
-            style: Theme.of(context).textTheme.titleSmall),
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                contact.displayName,
+                style: Theme.of(context).textTheme.titleSmall,
+              ),
+            ),
+            if (isSelected) const Chip(label: Text('Selected')),
+          ],
+        ),
         const SizedBox(height: 4),
         Text(contact.fingerprint),
         if (contact.lastKnownAddress != null) ...[
@@ -472,10 +592,20 @@ class _SavedContactTile extends StatelessWidget {
           const SizedBox(height: 4),
           Text('Seen ${contact.lastSeenAt}'),
         ],
-        if (contact.isLanDiscovered) ...[
-          const SizedBox(height: 8),
-          const Chip(label: Text('LAN discovered')),
-        ],
+        const SizedBox(height: 12),
+        Wrap(
+          spacing: 8,
+          runSpacing: 8,
+          children: [
+            if (contact.isLanDiscovered)
+              const Chip(label: Text('LAN discovered')),
+            FilledButton.tonalIcon(
+              onPressed: onOpenChat,
+              icon: const Icon(Icons.chat_bubble_outline),
+              label: const Text('Open In Chat'),
+            ),
+          ],
+        ),
       ],
     );
   }

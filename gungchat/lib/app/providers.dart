@@ -21,6 +21,9 @@ import '../models/message.dart';
 const bootstrapConversationId = 'bootstrap';
 
 final themeModeProvider = StateProvider<ThemeMode>((ref) => ThemeMode.system);
+final navigationIndexProvider = StateProvider<int>((ref) => 0);
+final selectedContactFingerprintProvider =
+    StateProvider<String?>((ref) => null);
 
 final secureStorageProvider = Provider<AppSecureStorage>((ref) {
   return AppSecureStorage();
@@ -116,6 +119,20 @@ final discoveryServiceProvider = Provider<DiscoveryService>((ref) {
 final contactBookProvider =
     StateNotifierProvider<ContactBookController, List<Contact>>((ref) {
   return ContactBookController();
+});
+
+final selectedContactProvider = Provider<Contact?>((ref) {
+  final fingerprint = ref.watch(selectedContactFingerprintProvider);
+  if (fingerprint == null) {
+    return null;
+  }
+
+  for (final contact in ref.watch(contactBookProvider)) {
+    if (contact.fingerprint == fingerprint) {
+      return contact;
+    }
+  }
+  return null;
 });
 
 final conversationMessagesProvider =

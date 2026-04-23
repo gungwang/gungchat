@@ -1,5 +1,7 @@
 import 'package:flutter/foundation.dart';
 
+String conversationIdForFingerprint(String fingerprint) => 'peer:$fingerprint';
+
 enum ContactTrustLevel {
   unknown,
   verified,
