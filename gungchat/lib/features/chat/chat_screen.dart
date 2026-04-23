@@ -217,10 +217,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return remoteFingerprint ?? 'Peer';
   }
 
-  Future<void> _syncPresenceStatus(PeerPresenceStatus status) async {
-    await ref.read(peerSessionControllerProvider.notifier).syncPresence(status);
-  }
-
   Future<void> _consumeConnectIntent(PeerConnectIntent intent) async {
     ref.read(pendingPeerConnectIntentProvider.notifier).state = null;
 
@@ -492,7 +488,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final savedContacts = ref.watch(contactBookProvider);
     final selectedContact = ref.watch(selectedContactProvider);
     final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
-    final localPresenceStatus = ref.watch(localPresenceStatusProvider);
 
     final selectedConversationId = selectedContact == null
         ? null
@@ -531,15 +526,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         : ref
             .read(peerDeepLinkServiceProvider)
             .buildInputUri(invitationDraft.clipboardText);
-
-    if (peerSession.isTransportReady) {
-      WidgetsBinding.instance.addPostFrameCallback((_) {
-        if (!mounted) {
-          return;
-        }
-        unawaited(_syncPresenceStatus(localPresenceStatus));
-      });
-    }
 
     return SafeArea(
       child: Padding(

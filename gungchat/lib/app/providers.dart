@@ -59,6 +59,14 @@ final localPresenceStatusProvider =
     storage: ref.watch(presencePreferencesStorageProvider),
   );
 });
+final appLifecycleStateProvider =
+    StateProvider<AppLifecycleState>((ref) => AppLifecycleState.resumed);
+final effectivePresenceStatusProvider = Provider<PeerPresenceStatus>((ref) {
+  return resolveEffectivePresenceStatus(
+    preferredStatus: ref.watch(localPresenceStatusProvider),
+    lifecycleState: ref.watch(appLifecycleStateProvider),
+  );
+});
 
 final secureStorageProvider = Provider<AppSecureStorage>((ref) {
   return AppSecureStorage();

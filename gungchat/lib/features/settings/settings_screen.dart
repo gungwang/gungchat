@@ -125,7 +125,7 @@ class SettingsScreen extends ConsumerWidget {
                   ),
                   const SizedBox(height: 8),
                   const Text(
-                    'Online and away are shared over the encrypted data channel while a secure session is open. Hidden suppresses your presence updates.',
+                    'Online is shared while the app is in the foreground and automatically falls back to Away in the background. Hidden suppresses your presence updates.',
                   ),
                 ],
               ),

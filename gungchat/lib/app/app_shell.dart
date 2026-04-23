@@ -16,19 +16,32 @@ class AppShell extends ConsumerStatefulWidget {
   ConsumerState<AppShell> createState() => _AppShellState();
 }
 
-class _AppShellState extends ConsumerState<AppShell> {
+class _AppShellState extends ConsumerState<AppShell>
+    with WidgetsBindingObserver {
   StreamSubscription<Uri>? _deepLinkSubscription;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    final initialLifecycleState = WidgetsBinding.instance.lifecycleState;
+    if (initialLifecycleState != null) {
+      ref.read(appLifecycleStateProvider.notifier).state =
+          initialLifecycleState;
+    }
     _deepLinkSubscription =
         ref.read(appLinksProvider).uriLinkStream.listen(_handleIncomingUri);
   }
 
   @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    ref.read(appLifecycleStateProvider.notifier).state = state;
+  }
+
+  @override
   void dispose() {
     _deepLinkSubscription?.cancel();
+    WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }
 
@@ -55,6 +68,21 @@ class _AppShellState extends ConsumerState<AppShell> {
   @override
   Widget build(BuildContext context) {
     final selectedIndex = ref.watch(navigationIndexProvider);
+    final peerSession = ref.watch(peerSessionControllerProvider);
+    final effectivePresenceStatus = ref.watch(effectivePresenceStatusProvider);
+
+    if (peerSession.isTransportReady) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) {
+          return;
+        }
+        unawaited(
+          ref
+              .read(peerSessionControllerProvider.notifier)
+              .syncPresence(effectivePresenceStatus),
+        );
+      });
+    }
 
     return Scaffold(
       body: IndexedStack(index: selectedIndex, children: _screens),
