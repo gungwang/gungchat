@@ -1,8 +1,28 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 
+import 'package:gungchat/app/providers.dart';
+import 'package:gungchat/features/chat/link_preview_service.dart';
 import 'package:gungchat/features/chat/widgets/message_bubble.dart';
 import 'package:gungchat/models/message.dart';
+
+Widget _buildTestApp(
+  Widget child, {
+  List<Override> overrides = const [],
+}) {
+  return ProviderScope(
+    overrides: overrides,
+    child: MaterialApp(
+      home: Scaffold(
+        body: Padding(
+          padding: const EdgeInsets.all(12),
+          child: child,
+        ),
+      ),
+    ),
+  );
+}
 
 void main() {
   testWidgets('message bubble renders message body and metadata', (
@@ -20,13 +40,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(12),
-            child: MessageBubble(message: message),
-          ),
-        ),
+      _buildTestApp(
+        MessageBubble(message: message),
       ),
     );
 
@@ -54,20 +69,15 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(12),
-            child: MessageBubble(
-              message: message,
-              onReply: () {
-                replyInvoked = true;
-              },
-              onQuotedMessageTap: () {
-                jumpInvoked = true;
-              },
-            ),
-          ),
+      _buildTestApp(
+        MessageBubble(
+          message: message,
+          onReply: () {
+            replyInvoked = true;
+          },
+          onQuotedMessageTap: () {
+            jumpInvoked = true;
+          },
         ),
       ),
     );
@@ -105,18 +115,13 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(12),
-            child: MessageBubble(
-              message: message,
-              currentUserId: 'peer-a',
-              onToggleReaction: (emoji) {
-                toggledEmoji = emoji;
-              },
-            ),
-          ),
+      _buildTestApp(
+        MessageBubble(
+          message: message,
+          currentUserId: 'peer-a',
+          onToggleReaction: (emoji) {
+            toggledEmoji = emoji;
+          },
         ),
       ),
     );
@@ -146,17 +151,12 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(12),
-            child: MessageBubble(
-              message: message,
-              onToggleStar: () {
-                toggledStar = true;
-              },
-            ),
-          ),
+      _buildTestApp(
+        MessageBubble(
+          message: message,
+          onToggleStar: () {
+            toggledStar = true;
+          },
         ),
       ),
     );
@@ -187,20 +187,15 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(12),
-            child: MessageBubble(
-              message: message,
-              onEdit: () {
-                editTapped = true;
-              },
-              onDelete: (mode) {
-                deleteMode = mode;
-              },
-            ),
-          ),
+      _buildTestApp(
+        MessageBubble(
+          message: message,
+          onEdit: () {
+            editTapped = true;
+          },
+          onDelete: (mode) {
+            deleteMode = mode;
+          },
         ),
       ),
     );
@@ -247,13 +242,8 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(12),
-            child: MessageBubble(message: message),
-          ),
-        ),
+      _buildTestApp(
+        MessageBubble(message: message),
       ),
     );
 
@@ -279,17 +269,12 @@ void main() {
     );
 
     await tester.pumpWidget(
-      MaterialApp(
-        home: Scaffold(
-          body: Padding(
-            padding: const EdgeInsets.all(12),
-            child: MessageBubble(
-              message: message,
-              onPlayAudio: () {
-                playedAudio = true;
-              },
-            ),
-          ),
+      _buildTestApp(
+        MessageBubble(
+          message: message,
+          onPlayAudio: () {
+            playedAudio = true;
+          },
         ),
       ),
     );
@@ -301,5 +286,39 @@ void main() {
     await tester.pump();
 
     expect(playedAudio, isTrue);
+  });
+
+  testWidgets('message bubble renders link preview when previews are enabled', (
+    WidgetTester tester,
+  ) async {
+    final message = Message(
+      id: '8',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: 'Look at https://example.com right now',
+      type: MessageType.text,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 45),
+      isOutgoing: false,
+    );
+    await tester.pumpWidget(
+      _buildTestApp(
+        MessageBubble(message: message),
+        overrides: [
+          linkPreviewProvider.overrideWith(
+            (ref, url) async => const LinkPreview(
+              url: 'https://example.com',
+              title: 'Example Domain',
+              description: 'Preview description',
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Example Domain'), findsOneWidget);
+    expect(find.text('Preview description'), findsOneWidget);
   });
 }

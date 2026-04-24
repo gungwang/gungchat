@@ -1,9 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../app/providers.dart';
 import '../reaction_service.dart';
+import '../link_preview_service.dart';
 import '../../../models/message.dart';
 
-class MessageBubble extends StatelessWidget {
+class MessageBubble extends ConsumerWidget {
   const MessageBubble({
     super.key,
     required this.message,
@@ -32,7 +35,7 @@ class MessageBubble extends StatelessWidget {
   final bool isPlayingAudio;
 
   @override
-  Widget build(BuildContext context) {
+  Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
     final alignment =
         message.isOutgoing ? Alignment.centerRight : Alignment.centerLeft;
@@ -102,7 +105,7 @@ class MessageBubble extends StatelessWidget {
             ),
             const SizedBox(height: 8),
           ],
-          _buildBody(theme),
+          _buildBody(context, ref, theme),
           const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -233,7 +236,7 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
-  Widget _buildBody(ThemeData theme) {
+  Widget _buildBody(BuildContext context, WidgetRef ref, ThemeData theme) {
     if (message.isDeleted) {
       return Text(
         'Message deleted',
@@ -250,6 +253,31 @@ class MessageBubble extends StatelessWidget {
         onPlayAudio: onPlayAudio,
         isPlayingAudio: isPlayingAudio,
       );
+    }
+
+    if (message.type == MessageType.text) {
+      final previewUrl = LinkPreviewService.extractFirstUrl(message.body);
+      if (previewUrl != null) {
+        final previewAsync = ref.watch(linkPreviewProvider(previewUrl));
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(message.body),
+            const SizedBox(height: 8),
+            previewAsync.when(
+              data: (preview) {
+                if (preview == null) {
+                  return const SizedBox.shrink();
+                }
+                return _LinkPreviewCard(preview: preview);
+              },
+              loading: () => const _LinkPreviewLoadingCard(),
+              error: (_, __) => const SizedBox.shrink(),
+            ),
+          ],
+        );
+      }
     }
 
     return Text(message.body);
@@ -354,6 +382,101 @@ class _AudioMessagePreview extends StatelessWidget {
         const SizedBox(width: 8),
         Text(durationLabel, style: theme.textTheme.labelMedium),
       ],
+    );
+  }
+}
+
+class _LinkPreviewCard extends StatelessWidget {
+  const _LinkPreviewCard({required this.preview});
+
+  final LinkPreview preview;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: theme.colorScheme.surface.withValues(alpha: 0.55),
+        border: Border.all(
+          color: theme.colorScheme.outlineVariant,
+        ),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (preview.imageUrl != null) ...[
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  preview.imageUrl!,
+                  height: 120,
+                  width: double.infinity,
+                  fit: BoxFit.cover,
+                  errorBuilder: (_, __, ___) => const SizedBox.shrink(),
+                ),
+              ),
+              const SizedBox(height: 8),
+            ],
+            Text(
+              preview.title,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.titleSmall,
+            ),
+            if (preview.description != null) ...[
+              const SizedBox(height: 4),
+              Text(
+                preview.description!,
+                maxLines: 3,
+                overflow: TextOverflow.ellipsis,
+                style: theme.textTheme.bodySmall,
+              ),
+            ],
+            const SizedBox(height: 6),
+            Text(
+              preview.url,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: theme.textTheme.labelSmall,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _LinkPreviewLoadingCard extends StatelessWidget {
+  const _LinkPreviewLoadingCard();
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: theme.colorScheme.surface.withValues(alpha: 0.45),
+      ),
+      child: const Padding(
+        padding: EdgeInsets.all(10),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            SizedBox(
+              width: 14,
+              height: 14,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+            SizedBox(width: 8),
+            Text('Loading link preview...'),
+          ],
+        ),
+      ),
     );
   }
 }

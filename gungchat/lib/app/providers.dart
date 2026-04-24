@@ -21,12 +21,14 @@ import '../features/chat/message_service.dart';
 import '../features/chat/presence_status.dart';
 import '../features/chat/peer_session_controller.dart';
 import '../features/chat/voice_message_service.dart';
+import '../features/chat/link_preview_service.dart';
 import '../features/contacts/contact_book_controller.dart';
 import '../features/contacts/contact_book_storage.dart';
 import '../features/contacts/contact_exchange_service.dart';
 import '../features/contacts/discovery_service.dart';
 import '../features/settings/presence_preferences.dart';
 import '../features/settings/read_receipt_preferences.dart';
+import '../features/settings/link_preview_preferences.dart';
 import '../models/contact.dart';
 import '../models/message.dart';
 
@@ -48,6 +50,10 @@ final presencePreferencesStorageProvider =
     Provider<PresencePreferencesStorage>((ref) {
   return const PresencePreferencesStorage();
 });
+final linkPreviewPreferencesStorageProvider =
+    Provider<LinkPreviewPreferencesStorage>((ref) {
+  return const LinkPreviewPreferencesStorage();
+});
 final readReceiptsEnabledProvider =
     StateNotifierProvider<ReadReceiptsPreferenceController, bool>((ref) {
   return ReadReceiptsPreferenceController(
@@ -59,6 +65,12 @@ final localPresenceStatusProvider =
         (ref) {
   return PresencePreferenceController(
     storage: ref.watch(presencePreferencesStorageProvider),
+  );
+});
+final linkPreviewsEnabledProvider =
+    StateNotifierProvider<LinkPreviewPreferenceController, bool>((ref) {
+  return LinkPreviewPreferenceController(
+    storage: ref.watch(linkPreviewPreferencesStorageProvider),
   );
 });
 final appLifecycleStateProvider =
@@ -150,6 +162,21 @@ final voiceMessageServiceProvider = ChangeNotifierProvider<VoiceMessageService>(
     return service;
   },
 );
+
+final linkPreviewServiceProvider = Provider<LinkPreviewService>((ref) {
+  final service = LinkPreviewService();
+  ref.onDispose(service.dispose);
+  return service;
+});
+
+final linkPreviewProvider =
+    FutureProvider.family<LinkPreview?, String>((ref, url) async {
+  if (!ref.watch(linkPreviewsEnabledProvider)) {
+    return null;
+  }
+
+  return ref.watch(linkPreviewServiceProvider).fetchPreview(url);
+});
 
 final peerSessionControllerProvider =
     StateNotifierProvider<PeerSessionController, PeerSessionState>((ref) {
