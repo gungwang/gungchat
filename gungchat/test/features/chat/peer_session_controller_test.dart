@@ -97,6 +97,22 @@ void main() {
       expect(decoded.receiptState, isNull);
     });
 
+    test('round-trips custom status text envelopes', () {
+      final envelope = PeerTransportEnvelope.statusText(
+        senderFingerprint: '22:33:44:55',
+        createdAt: DateTime.utc(2025, 1, 2, 3, 4, 5),
+        statusText: 'In a meeting',
+      );
+
+      final decoded = PeerTransportEnvelope.decodeTransportString(
+        envelope.encodeTransportString(),
+      );
+
+      expect(decoded.kind, PeerTransportEnvelopeKind.statusText);
+      expect(decoded.senderFingerprint, '22:33:44:55');
+      expect(decoded.statusText, 'In a meeting');
+    });
+
     test('round-trips read receipt envelopes', () {
       final envelope = PeerTransportEnvelope.receipt(
         messageId: 'message-3',

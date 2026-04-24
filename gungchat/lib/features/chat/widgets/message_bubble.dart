@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -246,6 +248,15 @@ class MessageBubble extends ConsumerWidget {
           color: theme.colorScheme.onSurfaceVariant,
         ),
       );
+    }
+
+    if (message.type == MessageType.location ||
+        message.type == MessageType.contactCard ||
+        message.type == MessageType.multiAttachment ||
+        message.type == MessageType.image ||
+        message.type == MessageType.video ||
+        message.hasAttachments) {
+      return _AttachmentMessageBody(message: message);
     }
 
     if (message.type == MessageType.audio && message.hasAudio) {
@@ -503,6 +514,203 @@ class _AudioMessagePreview extends StatelessWidget {
         Text(durationLabel, style: theme.textTheme.labelMedium),
       ],
     );
+  }
+}
+
+class _AttachmentMessageBody extends StatelessWidget {
+  const _AttachmentMessageBody({required this.message});
+
+  final Message message;
+
+  @override
+  Widget build(BuildContext context) {
+    if (message.type == MessageType.location && message.attachments.isNotEmpty) {
+      return _LocationAttachmentCard(attachment: message.attachments.first);
+    }
+    if (message.type == MessageType.contactCard && message.attachments.isNotEmpty) {
+      return _ContactAttachmentCard(attachment: message.attachments.first);
+    }
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        if (message.body.trim().isNotEmpty) ...[
+          Text(message.body),
+          const SizedBox(height: 8),
+        ],
+        for (final attachment in message.attachments) ...[
+          _AttachmentTile(attachment: attachment),
+          if (attachment != message.attachments.last) const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+}
+
+class _LocationAttachmentCard extends StatelessWidget {
+  const _LocationAttachmentCard({required this.attachment});
+
+  final Attachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    final latitude = attachment.metadata['latitude'];
+    final longitude = attachment.metadata['longitude'];
+
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.55),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(Icons.place_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Shared location',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text('Lat $latitude, Lng $longitude'),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _ContactAttachmentCard extends StatelessWidget {
+  const _ContactAttachmentCard({required this.attachment});
+
+  final Attachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.55),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(12),
+        child: Row(
+          children: [
+            const Icon(Icons.contact_page_outlined),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    (attachment.metadata['displayName'] as String?) ?? 'Shared contact',
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  const SizedBox(height: 4),
+                  Text((attachment.metadata['fingerprint'] as String?) ?? ''),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AttachmentTile extends StatelessWidget {
+  const _AttachmentTile({required this.attachment});
+
+  final Attachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    final filePath = attachment.filePath;
+    if (attachment.isImage && filePath != null && filePath.isNotEmpty) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(12),
+        child: Image.file(
+          File(filePath),
+          height: 180,
+          width: double.infinity,
+          fit: BoxFit.cover,
+          errorBuilder: (_, __, ___) => _AttachmentInfoRow(attachment: attachment),
+        ),
+      );
+    }
+
+    return _AttachmentInfoRow(attachment: attachment);
+  }
+}
+
+class _AttachmentInfoRow extends StatelessWidget {
+  const _AttachmentInfoRow({required this.attachment});
+
+  final Attachment attachment;
+
+  @override
+  Widget build(BuildContext context) {
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(12),
+        color: Theme.of(context).colorScheme.surface.withValues(alpha: 0.55),
+      ),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
+        child: Row(
+          children: [
+            Icon(_iconForType(attachment.type)),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    attachment.previewLabel,
+                    style: Theme.of(context).textTheme.titleSmall,
+                  ),
+                  if (attachment.mimeType != null || attachment.sizeBytes != null)
+                    Text(
+                      [
+                        if (attachment.mimeType != null) attachment.mimeType!,
+                        if (attachment.sizeBytes != null)
+                          '${(attachment.sizeBytes! / 1024).ceil()} KB',
+                      ].join(' • '),
+                      style: Theme.of(context).textTheme.bodySmall,
+                    ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  IconData _iconForType(AttachmentType type) {
+    switch (type) {
+      case AttachmentType.image:
+        return Icons.image_outlined;
+      case AttachmentType.video:
+        return Icons.videocam_outlined;
+      case AttachmentType.audio:
+        return Icons.audio_file_outlined;
+      case AttachmentType.document:
+        return Icons.insert_drive_file_outlined;
+      case AttachmentType.location:
+        return Icons.place_outlined;
+      case AttachmentType.contactCard:
+        return Icons.contact_page_outlined;
+    }
   }
 }
 

@@ -8,7 +8,20 @@ enum MessageType {
   text,
   image,
   audio,
+  video,
+  location,
+  contactCard,
+  multiAttachment,
   system,
+}
+
+enum AttachmentType {
+  image,
+  video,
+  audio,
+  document,
+  location,
+  contactCard,
 }
 
 enum MessageDeliveryState {
@@ -47,6 +60,7 @@ class Message {
     this.deleteMode,
     this.audioFilePath,
     this.audioDurationMs,
+    this.attachments = const [],
   });
 
   final String id;
@@ -68,12 +82,14 @@ class Message {
   final MessageDeleteMode? deleteMode;
   final String? audioFilePath;
   final int? audioDurationMs;
+  final List<Attachment> attachments;
 
   bool get isExpired => expiresAt != null && expiresAt!.isBefore(DateTime.now());
   bool get hasReply => replyToBody != null && replyToBody!.trim().isNotEmpty;
   bool get hasReactions => reactions.isNotEmpty;
   bool get isEdited => editedAt != null && !isDeleted;
   bool get isDeleted => deletedAt != null;
+  bool get hasAttachments => attachments.isNotEmpty;
   bool get hasAudio =>
       type == MessageType.audio &&
       audioFilePath != null &&
@@ -84,6 +100,23 @@ class Message {
     }
     if (type == MessageType.audio) {
       return 'Voice message';
+    }
+    if (type == MessageType.location) {
+      return 'Shared location';
+    }
+    if (type == MessageType.contactCard) {
+      return 'Shared contact card';
+    }
+    if (type == MessageType.multiAttachment) {
+      return attachments.isEmpty
+          ? 'Attachments'
+          : '${attachments.length} attachment${attachments.length == 1 ? '' : 's'}';
+    }
+    if (type == MessageType.image) {
+      return hasAttachments ? attachments.first.previewLabel : 'Image';
+    }
+    if (type == MessageType.video) {
+      return hasAttachments ? attachments.first.previewLabel : 'Video';
     }
 
     final compact = SpoilerRenderer.previewText(body);
@@ -120,6 +153,7 @@ class Message {
     bool clearAudioFilePath = false,
     int? audioDurationMs,
     bool clearAudioDurationMs = false,
+    List<Attachment>? attachments,
   }) {
     return Message(
       id: id ?? this.id,
@@ -145,6 +179,7 @@ class Message {
       audioDurationMs: clearAudioDurationMs
           ? null
           : audioDurationMs ?? this.audioDurationMs,
+        attachments: attachments ?? this.attachments,
     );
   }
 
@@ -179,6 +214,32 @@ class Message {
     );
   }
 
+  static String? encodeAttachments(List<Attachment> attachments) {
+    if (attachments.isEmpty) {
+      return null;
+    }
+
+    return jsonEncode(
+      attachments.map((attachment) => attachment.toJson()).toList(growable: false),
+    );
+  }
+
+  static List<Attachment> decodeAttachments(Object? rawValue) {
+    if (rawValue == null) {
+      return const [];
+    }
+
+    final encoded = rawValue as String;
+    if (encoded.isEmpty) {
+      return const [];
+    }
+
+    final decoded = jsonDecode(encoded) as List<dynamic>;
+    return decoded
+        .map((entry) => Attachment.fromJson(Map<String, dynamic>.from(entry as Map)))
+        .toList(growable: false);
+  }
+
   Map<String, Object?> toMap() {
     return {
       'id': id,
@@ -199,6 +260,7 @@ class Message {
       'delete_mode': deleteMode?.name,
       'audio_file_path': audioFilePath,
       'audio_duration_ms': audioDurationMs,
+      'attachments_json': encodeAttachments(attachments),
     };
   }
 
@@ -233,6 +295,100 @@ class Message {
           : MessageDeleteMode.values.byName(map['delete_mode']! as String),
       audioFilePath: map['audio_file_path'] as String?,
       audioDurationMs: map['audio_duration_ms'] as int?,
+      attachments: decodeAttachments(map['attachments_json']),
+    );
+  }
+}
+
+@immutable
+class Attachment {
+  const Attachment({
+    required this.id,
+    required this.type,
+    required this.displayName,
+    this.filePath,
+    this.mimeType,
+    this.sizeBytes,
+    this.metadata = const <String, Object?>{},
+  });
+
+  final String id;
+  final AttachmentType type;
+  final String displayName;
+  final String? filePath;
+  final String? mimeType;
+  final int? sizeBytes;
+  final Map<String, Object?> metadata;
+
+  bool get hasFilePath => filePath != null && filePath!.trim().isNotEmpty;
+  bool get isMedia =>
+      type == AttachmentType.image ||
+      type == AttachmentType.video ||
+      type == AttachmentType.audio;
+  bool get isImage => type == AttachmentType.image;
+  String get previewLabel {
+    switch (type) {
+      case AttachmentType.location:
+        return 'Location';
+      case AttachmentType.contactCard:
+        return metadata['displayName'] as String? ?? 'Contact card';
+      case AttachmentType.audio:
+        return displayName.isEmpty ? 'Audio' : displayName;
+      case AttachmentType.video:
+        return displayName.isEmpty ? 'Video' : displayName;
+      case AttachmentType.image:
+        return displayName.isEmpty ? 'Image' : displayName;
+      case AttachmentType.document:
+        return displayName.isEmpty ? 'Document' : displayName;
+    }
+  }
+
+  Attachment copyWith({
+    String? id,
+    AttachmentType? type,
+    String? displayName,
+    String? filePath,
+    bool clearFilePath = false,
+    String? mimeType,
+    bool clearMimeType = false,
+    int? sizeBytes,
+    bool clearSizeBytes = false,
+    Map<String, Object?>? metadata,
+  }) {
+    return Attachment(
+      id: id ?? this.id,
+      type: type ?? this.type,
+      displayName: displayName ?? this.displayName,
+      filePath: clearFilePath ? null : filePath ?? this.filePath,
+      mimeType: clearMimeType ? null : mimeType ?? this.mimeType,
+      sizeBytes: clearSizeBytes ? null : sizeBytes ?? this.sizeBytes,
+      metadata: metadata ?? this.metadata,
+    );
+  }
+
+  Map<String, Object?> toJson() {
+    return <String, Object?>{
+      'id': id,
+      'type': type.name,
+      'displayName': displayName,
+      'filePath': filePath,
+      'mimeType': mimeType,
+      'sizeBytes': sizeBytes,
+      'metadata': metadata,
+    };
+  }
+
+  factory Attachment.fromJson(Map<String, dynamic> json) {
+    return Attachment(
+      id: json['id'] as String,
+      type: AttachmentType.values.byName(json['type'] as String),
+      displayName: json['displayName'] as String? ?? '',
+      filePath: json['filePath'] as String?,
+      mimeType: json['mimeType'] as String?,
+      sizeBytes: json['sizeBytes'] as int?,
+      metadata: Map<String, Object?>.from(
+        json['metadata'] as Map? ?? const <String, Object?>{},
+      ),
     );
   }
 }

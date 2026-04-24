@@ -41,6 +41,10 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>GungChat uses the camera to scan peer QR codes for direct encrypted contact exchange.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>GungChat uses Face ID or your device passcode to protect access to local encrypted conversations.</string>
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>GungChat uses your location only when you choose to share your current position with a peer.</string>
 	<key>NSMicrophoneUsageDescription</key>
 	<string>GungChat uses the microphone to record encrypted voice messages for direct peer conversations.</string>
 	<key>NSBonjourServices</key>

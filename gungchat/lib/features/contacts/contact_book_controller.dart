@@ -37,11 +37,16 @@ class ContactBookController extends StateNotifier<List<Contact>> {
     if (index == -1) {
       next.add(contact);
     } else {
+      final existing = next[index];
       next[index] = next[index].copyWith(
         displayName: contact.displayName,
         lastKnownAddress: contact.lastKnownAddress,
         lastSeenAt: contact.lastSeenAt,
         isLanDiscovered: contact.isLanDiscovered,
+        trustLevel: contact.trustLevel == ContactTrustLevel.unknown
+            ? existing.trustLevel
+            : contact.trustLevel,
+        note: contact.note ?? existing.note,
       );
     }
 
@@ -51,6 +56,11 @@ class ContactBookController extends StateNotifier<List<Contact>> {
           ),
     );
     state = List<Contact>.unmodifiable(next);
+    unawaited(_storage.saveContacts(state));
+  }
+
+  void clear() {
+    state = const [];
     unawaited(_storage.saveContacts(state));
   }
 }

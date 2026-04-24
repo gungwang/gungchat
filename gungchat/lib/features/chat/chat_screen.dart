@@ -1,17 +1,26 @@
 import 'dart:async';
 
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:mime/mime.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../app/providers.dart';
+import '../../commands/slash_command_registry.dart';
+import '../../core/accessibility/a11y_helper.dart';
 import '../../core/encryption/key_manager.dart';
 import '../../core/networking/network_monitor.dart';
 import '../../core/networking/webrtc_manager.dart';
 import '../../core/text/spoiler_renderer.dart';
+import '../../media/media_gallery_screen.dart';
 import '../../models/contact.dart';
 import '../../models/message.dart';
+import '../contacts/contact_exchange_service.dart';
 import '../contacts/discovery_service.dart';
+import '../../templates/quick_reply_service.dart';
 import 'pending_peer_input.dart';
 import 'peer_connect_intent.dart';
 import 'peer_invitation_builder.dart';
@@ -38,6 +47,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   String? _highlightedMessageId;
   bool _burnAfterRead = true;
   bool _sending = false;
+  int _attachmentSequence = 0;
 
   @override
   void dispose() {
@@ -52,10 +62,308 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   Future<void> _copyText(String label, String value) async {
     await Clipboard.setData(ClipboardData(text: value));
     if (mounted) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('$label copied')),
-      );
+      _showSnack('$label copied');
     }
+  }
+
+  void _showSnack(String message) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(message)),
+    );
+  }
+
+  void _setComposerText(String value) {
+    _composerController.value = TextEditingValue(
+      text: value,
+      selection: TextSelection.collapsed(offset: value.length),
+    );
+  }
+
+  String? _quickReplyLookupPrefix({bool allowWhileEditing = false}) {
+    if (!allowWhileEditing && _editingMessage != null) {
+      return null;
+    }
+
+    final currentText = _composerController.text.trim();
+    if (!QuickReplyService.looksLikeLookup(currentText)) {
+      return null;
+    }
+    if (const SlashCommandRegistry().execute(currentText) != null) {
+      return null;
+    }
+
+    return QuickReplyService.lookupPrefix(currentText);
+  }
+
+  Future<bool> _expandQuickReplyIfNeeded() async {
+    final lookup = _quickReplyLookupPrefix(allowWhileEditing: true);
+    if (lookup == null || lookup.isEmpty) {
+      return false;
+    }
+
+    final service = await ref.read(quickReplyServiceProvider.future);
+    final replacement = await service.useTemplate(lookup);
+    if (replacement == null) {
+      return false;
+    }
+
+    _setComposerText(replacement);
+    ref.invalidate(allQuickRepliesProvider);
+    if (mounted) {
+      A11yHelper.announce('Quick reply inserted', context);
+    }
+    return true;
+  }
+
+  Future<void> _applyQuickReply(QuickReply template) async {
+    final service = await ref.read(quickReplyServiceProvider.future);
+    final replacement = await service.useTemplate(template.shortCode);
+    if (replacement == null) {
+      return;
+    }
+
+    _setComposerText(replacement);
+    ref.invalidate(allQuickRepliesProvider);
+    if (mounted) {
+      ref.read(chatComposerFocusNodeProvider).requestFocus();
+      A11yHelper.announce('Quick reply inserted', context);
+    }
+  }
+
+  String _nextAttachmentId() {
+    _attachmentSequence += 1;
+    return '${DateTime.now().microsecondsSinceEpoch}-$_attachmentSequence';
+  }
+
+  AttachmentType _attachmentTypeForFile(PlatformFile file) {
+    final mimeType = file.path == null ? null : lookupMimeType(file.path!);
+    if (mimeType != null) {
+      if (mimeType.startsWith('image/')) {
+        return AttachmentType.image;
+      }
+      if (mimeType.startsWith('video/')) {
+        return AttachmentType.video;
+      }
+      if (mimeType.startsWith('audio/')) {
+        return AttachmentType.audio;
+      }
+    }
+
+    final extension = file.extension?.toLowerCase();
+    if (extension != null) {
+      if (const {'png', 'jpg', 'jpeg', 'gif', 'webp', 'heic'}.contains(extension)) {
+        return AttachmentType.image;
+      }
+      if (const {'mp4', 'mov', 'mkv', 'webm'}.contains(extension)) {
+        return AttachmentType.video;
+      }
+      if (const {'aac', 'm4a', 'mp3', 'ogg', 'wav'}.contains(extension)) {
+        return AttachmentType.audio;
+      }
+    }
+
+    return AttachmentType.document;
+  }
+
+  MessageType _messageTypeForAttachments(List<Attachment> attachments) {
+    if (attachments.length != 1) {
+      return MessageType.multiAttachment;
+    }
+
+    switch (attachments.first.type) {
+      case AttachmentType.image:
+        return MessageType.image;
+      case AttachmentType.video:
+        return MessageType.video;
+      case AttachmentType.location:
+        return MessageType.location;
+      case AttachmentType.contactCard:
+        return MessageType.contactCard;
+      case AttachmentType.audio:
+      case AttachmentType.document:
+        return MessageType.multiAttachment;
+    }
+  }
+
+  Future<void> _sendAttachments(
+    List<Attachment> attachments, {
+    required Message? replyingToMessage,
+  }) async {
+    if (attachments.isEmpty || _sending) {
+      return;
+    }
+
+    setState(() {
+      _sending = true;
+    });
+
+    try {
+      final sent = await ref.read(peerSessionControllerProvider.notifier).sendAttachments(
+            messageType: _messageTypeForAttachments(attachments),
+            attachments: attachments,
+            burnAfterRead: _burnAfterRead,
+            replyToMessageId: replyingToMessage?.id,
+            replyToBody: replyingToMessage?.previewText,
+          );
+      if (sent) {
+        _clearReplyTarget();
+        if (mounted) {
+          A11yHelper.announce('Attachment sent', context);
+        }
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+        });
+      }
+    }
+  }
+
+  Future<void> _pickFilesAndSend({required Message? replyingToMessage}) async {
+    final result = await FilePicker.platform.pickFiles(allowMultiple: true);
+    if (result == null || result.files.isEmpty) {
+      return;
+    }
+
+    final attachments = result.files
+        .where((file) => file.path != null && file.path!.trim().isNotEmpty)
+        .map(
+          (file) => Attachment(
+            id: _nextAttachmentId(),
+            type: _attachmentTypeForFile(file),
+            displayName: file.name,
+            filePath: file.path,
+            mimeType: file.path == null ? null : lookupMimeType(file.path!),
+            sizeBytes: file.size,
+          ),
+        )
+        .toList(growable: false);
+    if (attachments.isEmpty) {
+      _showSnack('The selected files are not accessible from this device.');
+      return;
+    }
+
+    await _sendAttachments(
+      attachments,
+      replyingToMessage: replyingToMessage,
+    );
+  }
+
+  Future<void> _shareCurrentLocation({required Message? replyingToMessage}) async {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!serviceEnabled) {
+      _showSnack('Enable location services before sharing your location.');
+      return;
+    }
+
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      _showSnack('Location permission is required to share your location.');
+      return;
+    }
+
+    final position = await Geolocator.getCurrentPosition();
+    await _sendAttachments(
+      [
+        Attachment(
+          id: _nextAttachmentId(),
+          type: AttachmentType.location,
+          displayName: 'Current location',
+          metadata: <String, Object?>{
+            'latitude': position.latitude,
+            'longitude': position.longitude,
+            'accuracyMeters': position.accuracy,
+          },
+        ),
+      ],
+      replyingToMessage: replyingToMessage,
+    );
+  }
+
+  Future<Contact?> _pickContactCardTarget() async {
+    final savedContacts = ref.read(contactBookProvider);
+    if (savedContacts.isEmpty) {
+      _showSnack('Save or import a contact before sharing a contact card.');
+      return null;
+    }
+
+    return showModalBottomSheet<Contact>(
+      context: context,
+      builder: (sheetContext) {
+        return SafeArea(
+          child: ListView(
+            shrinkWrap: true,
+            children: [
+              const ListTile(title: Text('Share contact card')),
+              for (final contact in savedContacts)
+                ListTile(
+                  leading: const Icon(Icons.contact_page_outlined),
+                  title: Text(contact.displayName),
+                  subtitle: Text(contact.fingerprint),
+                  onTap: () => Navigator.of(sheetContext).pop(contact),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _shareContactCard({required Message? replyingToMessage}) async {
+    final contact = await _pickContactCardTarget();
+    if (contact == null) {
+      return;
+    }
+
+    final lastKnownAddress = contact.lastKnownAddress;
+    final addressParts = lastKnownAddress?.split(':') ?? const <String>[];
+    final addresses = addressParts.isEmpty ? const <String>[] : [addressParts.first];
+    final port = addressParts.length < 2
+        ? DiscoveryService.discoveryPort
+        : int.tryParse(addressParts.last) ?? DiscoveryService.discoveryPort;
+    final card = ContactCard(
+      displayName: contact.displayName,
+      fingerprint: contact.fingerprint,
+      addresses: addresses,
+      port: port,
+      createdAt: contact.lastSeenAt,
+    );
+    final payload = ref.read(contactExchangeServiceProvider).encodeContactCard(card);
+
+    await _sendAttachments(
+      [
+        Attachment(
+          id: _nextAttachmentId(),
+          type: AttachmentType.contactCard,
+          displayName: '${contact.displayName} contact card',
+          metadata: <String, Object?>{
+            'displayName': contact.displayName,
+            'fingerprint': contact.fingerprint,
+            'payload': payload,
+          },
+        ),
+      ],
+      replyingToMessage: replyingToMessage,
+    );
+  }
+
+  Future<void> _openMediaGallery({
+    required String conversationId,
+    required String title,
+  }) async {
+    await Navigator.of(context).push(
+      MaterialPageRoute<void>(
+        builder: (_) => MediaGalleryScreen(
+          conversationId: conversationId,
+          title: title,
+        ),
+      ),
+    );
   }
 
   void _startReply(Message message) {
@@ -292,6 +600,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return;
     }
 
+    if (selectedContact != null &&
+        ref.read(blockedContactsProvider).contains(selectedContact.fingerprint)) {
+      _showSnack(
+        '${selectedContact.displayName} is blocked. Unblock this contact before sending peer messages.',
+      );
+      return;
+    }
+
     final peerSession = ref.read(peerSessionControllerProvider);
 
     if (peerSession.isSessionActive && !peerSession.isTransportReady) {
@@ -362,6 +678,26 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     Message? replyingToMessage,
     Message? editingMessage,
   }) async {
+    final peerSession = ref.read(peerSessionControllerProvider);
+    final activeConversationId = peerSession.conversationId ??
+        (selectedContact == null
+            ? bootstrapConversationId
+            : conversationIdForFingerprint(selectedContact.fingerprint));
+
+    if (editingMessage == null) {
+      await _expandQuickReplyIfNeeded();
+    }
+
+    if (editingMessage == null) {
+      final handled = await _executeSlashCommandIfNeeded(
+        conversationId: activeConversationId,
+        selectedContact: selectedContact,
+      );
+      if (handled) {
+        return;
+      }
+    }
+
     if (editingMessage != null) {
       final body = _composerController.text.trim();
       if (body.isEmpty || _sending) {
@@ -398,6 +734,219 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       selectedContact,
       replyingToMessage: replyingToMessage,
     );
+  }
+
+  Future<bool> _executeSlashCommandIfNeeded({
+    required String conversationId,
+    required Contact? selectedContact,
+  }) async {
+    final result = const SlashCommandRegistry().execute(_composerController.text);
+    if (result == null) {
+      return false;
+    }
+
+    switch (result.action) {
+      case SlashCommandAction.clear:
+        await _clearConversationHistory(conversationId: conversationId);
+        break;
+      case SlashCommandAction.export:
+        await _exportConversation(
+          conversationId: conversationId,
+          selectedContact: selectedContact,
+        );
+        break;
+      case SlashCommandAction.status:
+        final nextStatusText = result.statusText ?? '';
+        await ref.read(customStatusTextProvider.notifier).setText(nextStatusText);
+        await ref
+            .read(peerSessionControllerProvider.notifier)
+            .syncCustomStatusText(ref.read(customStatusTextProvider));
+        if (mounted) {
+          _showSnack(
+            nextStatusText.trim().isEmpty
+                ? 'Custom status cleared.'
+                : 'Custom status updated.',
+          );
+        }
+        break;
+      case SlashCommandAction.destroy:
+        await _destroyLocalData(activeConversationId: conversationId);
+        break;
+      case SlashCommandAction.showHelp:
+        await _showSlashHelp(
+          result.message ?? const SlashCommandRegistry().helpText,
+        );
+        break;
+      case SlashCommandAction.showMessage:
+        if (mounted && result.message != null) {
+          _showSnack(result.message!);
+        }
+        break;
+    }
+
+    _composerController.clear();
+    await ref.read(peerSessionControllerProvider.notifier).clearLocalTyping(
+          notifyPeer: false,
+        );
+    return true;
+  }
+
+  Future<void> _showSlashHelp(String helpText) async {
+    if (!mounted) {
+      return;
+    }
+
+    await showDialog<void>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Slash commands'),
+          content: SingleChildScrollView(child: Text(helpText)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              child: const Text('Close'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  Future<void> _exportConversation({
+    required String conversationId,
+    required Contact? selectedContact,
+  }) async {
+    final messageService = await ref.read(messageServiceProvider.future);
+    final messages = await messageService.listMessages(conversationId);
+    if (messages.isEmpty) {
+      if (mounted) {
+        _showSnack('No messages are available to export.');
+      }
+      return;
+    }
+
+    final label = selectedContact?.displayName ?? 'bootstrap';
+    final exportFile = await ref.read(chatExportServiceProvider).exportConversation(
+          conversationId: conversationId,
+          conversationLabel: label,
+          messages: messages,
+        );
+    await ref.read(chatExportServiceProvider).shareExport(exportFile);
+    if (mounted) {
+      _showSnack('Chat export prepared for sharing.');
+    }
+  }
+
+  Future<void> _clearConversationHistory({
+    required String conversationId,
+  }) async {
+    final confirmed = await _confirmAction(
+      title: 'Clear conversation?',
+      content:
+          'This removes the current conversation from local storage on this device.',
+      confirmLabel: 'Clear',
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    final messageService = await ref.read(messageServiceProvider.future);
+    await messageService.clearConversation(conversationId);
+    ref.invalidate(conversationMessagesProvider(conversationId));
+    _highlightClearTimer?.cancel();
+    if (_replyingToMessage?.conversationId == conversationId) {
+      _clearReplyTarget();
+    }
+    if (_editingMessage?.conversationId == conversationId) {
+      _clearEditTarget(clearComposer: true);
+    }
+    if (mounted) {
+      setState(() {
+        _highlightedMessageId = null;
+      });
+      _showSnack('Conversation cleared locally.');
+    }
+  }
+
+  Future<void> _destroyLocalData({
+    required String activeConversationId,
+  }) async {
+    final confirmed = await _confirmAction(
+      title: 'Wipe local data?',
+      content:
+          'This removes local messages, saved contacts, preferences, blocked peers, and identity keys from this device.',
+      confirmLabel: 'Wipe',
+    );
+    if (!confirmed) {
+      return;
+    }
+
+    await ref.read(peerSessionControllerProvider.notifier).resetSession();
+    await ref.read(voiceMessageServiceProvider).cancelRecording();
+    await ref.read(voiceMessageServiceProvider).stopPlayback();
+
+    final messageService = await ref.read(messageServiceProvider.future);
+    await messageService.wipeAllLocalData();
+    await ref.read(keyManagerProvider).clearIdentity();
+    await ref.read(secureStorageProvider).deleteAll();
+    final preferences = await SharedPreferences.getInstance();
+    await preferences.clear();
+    ref.read(appLockServiceProvider).clearSession();
+
+    ref.read(selectedContactFingerprintProvider.notifier).state = null;
+    ref.read(pendingPeerInputProvider.notifier).state = null;
+    ref.read(pendingPeerConnectIntentProvider.notifier).state = null;
+
+    ref.invalidate(deviceIdentityProvider);
+    ref.invalidate(contactBookProvider);
+    ref.invalidate(blockedContactsProvider);
+    ref.invalidate(readReceiptsEnabledProvider);
+    ref.invalidate(localPresenceStatusProvider);
+    ref.invalidate(linkPreviewsEnabledProvider);
+    ref.invalidate(customStatusTextProvider);
+    ref.invalidate(appLockSettingsProvider);
+    ref.invalidate(conversationMessagesProvider(activeConversationId));
+    ref.invalidate(conversationMessagesProvider(bootstrapConversationId));
+
+    _highlightClearTimer?.cancel();
+    if (mounted) {
+      setState(() {
+        _replyingToMessage = null;
+        _editingMessage = null;
+        _highlightedMessageId = null;
+      });
+      _composerController.clear();
+      _signalController.clear();
+      _showSnack('Local data wiped. A new identity will be generated when needed.');
+    }
+  }
+
+  Future<bool> _confirmAction({
+    required String title,
+    required String content,
+    required String confirmLabel,
+  }) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(title),
+          content: Text(content),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(confirmLabel),
+            ),
+          ],
+        );
+      },
+    );
+    return confirmed ?? false;
   }
 
   Future<void> _deleteMessage(
@@ -809,7 +1358,17 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final peerSession = ref.watch(peerSessionControllerProvider);
     final savedContacts = ref.watch(contactBookProvider);
     final selectedContact = ref.watch(selectedContactProvider);
+    final blockedContacts = ref.watch(blockedContactsProvider);
     final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
+    final customStatusText = ref.watch(customStatusTextProvider);
+    final composerFocusNode = ref.watch(chatComposerFocusNodeProvider);
+
+    final isSelectedContactBlocked = selectedContact != null &&
+      blockedContacts.contains(selectedContact.fingerprint);
+    final isActivePeerBlocked = peerSession.remoteFingerprint != null &&
+      blockedContacts.contains(peerSession.remoteFingerprint!);
+    final isConversationBlocked =
+      isSelectedContactBlocked || isActivePeerBlocked;
 
     final selectedConversationId = selectedContact == null
         ? null
@@ -831,8 +1390,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final canSendSecure = peerSession.isTransportReady;
     final canSaveLocal =
         selectedContact == null && !peerSession.isSessionActive;
-    final composerEnabled = canSendSecure || canSaveLocal;
     final isRecordingVoice = voiceMessageService.isRecording;
+    final composerEnabled = !isRecordingVoice;
     final selectedUri = selectedContact?.lastKnownAddress == null
         ? null
         : ref.read(discoveryServiceProvider).buildManualConnectionUri(
@@ -843,7 +1402,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   DiscoveryService.discoveryPort,
               fingerprint: selectedContact.fingerprint,
             );
-    final invitationDraft = selectedContact == null
+    final invitationDraft = selectedContact == null || isSelectedContactBlocked
         ? null
         : ref.read(peerInvitationBuilderProvider).build(
               contact: selectedContact,
@@ -856,6 +1415,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         : ref
             .read(peerDeepLinkServiceProvider)
             .buildInputUri(invitationDraft.clipboardText);
+    final quickReplyLookupPrefix = _quickReplyLookupPrefix();
+    final quickReplyMatchesAsync = quickReplyLookupPrefix == null
+      ? null
+      : ref.watch(quickReplyMatchesProvider(quickReplyLookupPrefix));
+    final conversationTitle = selectedContact?.displayName ?? 'Bootstrap';
 
     return SafeArea(
       child: Padding(
@@ -877,6 +1441,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             _ContactTargetCard(
               contacts: savedContacts,
               selectedContact: selectedContact,
+              blockedFingerprints: blockedContacts,
+              isSelectedContactBlocked: isSelectedContactBlocked,
               selectedUri: selectedUri?.toString(),
               onSelectContact: (fingerprint) {
                 ref.read(selectedContactFingerprintProvider.notifier).state =
@@ -900,6 +1466,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   ? null
                   : () => _copyText('Manual URI', selectedUri.toString()),
               onConnect: selectedContact == null
+                  || isSelectedContactBlocked
                   ? null
                   : () {
                       ref
@@ -913,6 +1480,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
             _PeerSessionCard(
               sessionState: peerSession,
               selectedContact: selectedContact,
+              isTargetBlocked: isSelectedContactBlocked,
               invitationDraft: invitationDraft,
               signalController: _signalController,
               onStartOffer: () async {
@@ -940,6 +1508,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 }
               },
               onConnect: selectedContact == null
+                  || isSelectedContactBlocked
                   ? null
                   : () async {
                       ref
@@ -1052,6 +1621,30 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       Text(
                         'Peer status: ${peerSession.remotePresenceStatus!.label}',
                         style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                    if (peerSession.remoteStatusText != null &&
+                        peerSession.remoteStatusText!.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Peer custom status: ${peerSession.remoteStatusText!}',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                    if (customStatusText.isNotEmpty) ...[
+                      const SizedBox(height: 4),
+                      Text(
+                        'Your custom status: $customStatusText',
+                        style: theme.textTheme.bodySmall,
+                      ),
+                    ],
+                    if (isConversationBlocked) ...[
+                      const SizedBox(height: 8),
+                      Text(
+                        'This contact is blocked. Unblock them in Contacts before continuing peer messaging.',
+                        style: theme.textTheme.bodySmall?.copyWith(
+                          color: theme.colorScheme.error,
+                        ),
                       ),
                     ],
                     if (replyingToMessage != null) ...[
@@ -1167,17 +1760,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ],
                     const SizedBox(height: 12),
                     TextField(
+                      focusNode: composerFocusNode,
                       controller: _composerController,
                       maxLines: 3,
                       minLines: 1,
-                      enabled: composerEnabled && !isRecordingVoice,
-                      onChanged: canSendSecure
-                          ? (value) {
-                              ref
-                                  .read(peerSessionControllerProvider.notifier)
-                                  .updateComposerActivity(value);
-                            }
-                          : null,
+                      enabled: composerEnabled,
+                      onChanged: (value) {
+                        setState(() {});
+                        if (canSendSecure) {
+                          ref
+                              .read(peerSessionControllerProvider.notifier)
+                              .updateComposerActivity(value);
+                        }
+                      },
                       textInputAction: TextInputAction.send,
                       onSubmitted: identityAsync.asData == null ||
                               _sending ||
@@ -1203,10 +1798,37 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             ? 'Type an encrypted message for the active peer session...'
                             : canSaveLocal
                                 ? 'Type a local encrypted message draft...'
-                                : 'Select a peer and complete the signal exchange to enable sending.',
+                                : isConversationBlocked
+                                    ? 'This contact is blocked. Slash commands still run locally.'
+                                    : 'Type /help for local commands, or complete the signal exchange to enable sending.',
                         border: const OutlineInputBorder(),
                       ),
                     ),
+                    if (quickReplyMatchesAsync != null) ...[
+                      const SizedBox(height: 8),
+                      quickReplyMatchesAsync.when(
+                        data: (templates) {
+                          if (templates.isEmpty) {
+                            return const SizedBox.shrink();
+                          }
+
+                          return Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              for (final template in templates)
+                                ActionChip(
+                                  label: Text('/${template.shortCode}'),
+                                  avatar: const Icon(Icons.flash_on_outlined, size: 18),
+                                  onPressed: () => unawaited(_applyQuickReply(template)),
+                                ),
+                            ],
+                          );
+                        },
+                        loading: () => const LinearProgressIndicator(),
+                        error: (_, __) => const SizedBox.shrink(),
+                      ),
+                    ],
                     if (peerSession.isRemoteTyping) ...[
                       const SizedBox(height: 8),
                       Text(
@@ -1236,6 +1858,50 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: [
+                        FilledButton.tonalIcon(
+                          onPressed: () => _openMediaGallery(
+                            conversationId: activeConversationId,
+                            title: conversationTitle,
+                          ),
+                          icon: const Icon(Icons.photo_library_outlined),
+                          label: const Text('Gallery'),
+                        ),
+                        if (canSendSecure) ...[
+                          FilledButton.tonalIcon(
+                            onPressed: _sending || isRecordingVoice || isConversationBlocked
+                                ? null
+                                : () => _pickFilesAndSend(
+                                      replyingToMessage: replyingToMessage,
+                                    ),
+                            icon: const Icon(Icons.attach_file),
+                            label: const Text('Files'),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: _sending || isRecordingVoice || isConversationBlocked
+                                ? null
+                                : () => _shareCurrentLocation(
+                                      replyingToMessage: replyingToMessage,
+                                    ),
+                            icon: const Icon(Icons.place_outlined),
+                            label: const Text('Location'),
+                          ),
+                          FilledButton.tonalIcon(
+                            onPressed: _sending || isRecordingVoice || isConversationBlocked
+                                ? null
+                                : () => _shareContactCard(
+                                      replyingToMessage: replyingToMessage,
+                                    ),
+                            icon: const Icon(Icons.contact_page_outlined),
+                            label: const Text('Contact'),
+                          ),
+                        ],
+                      ],
+                    ),
+                    const SizedBox(height: 8),
                     Row(
                       children: [
                         if (canSendSecure) ...[
@@ -1243,7 +1909,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                             child: OutlinedButton.icon(
                               onPressed: identityAsync.asData == null ||
                                       _sending ||
-                                      editingMessage != null
+                                      editingMessage != null ||
+                                      isConversationBlocked
                                   ? null
                                   : () => _toggleVoiceRecording(
                                         canSendSecure: canSendSecure,
@@ -1267,7 +1934,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           child: FilledButton.icon(
                             onPressed: identityAsync.asData == null ||
                                     _sending ||
-                                    !composerEnabled ||
                                     isRecordingVoice
                                 ? null
                                 : () => _submitComposer(
@@ -1358,6 +2024,8 @@ class _ContactTargetCard extends StatelessWidget {
   const _ContactTargetCard({
     required this.contacts,
     required this.selectedContact,
+    required this.blockedFingerprints,
+    required this.isSelectedContactBlocked,
     required this.onSelectContact,
     required this.onClearSelection,
     required this.onConnect,
@@ -1367,6 +2035,8 @@ class _ContactTargetCard extends StatelessWidget {
 
   final List<Contact> contacts;
   final Contact? selectedContact;
+  final Set<String> blockedFingerprints;
+  final bool isSelectedContactBlocked;
   final ValueChanged<String> onSelectContact;
   final VoidCallback onClearSelection;
   final VoidCallback? onConnect;
@@ -1394,7 +2064,11 @@ class _ContactTargetCard extends StatelessWidget {
                 children: [
                   for (final contact in contacts)
                     ChoiceChip(
-                      label: Text(contact.displayName),
+                      label: Text(
+                        blockedFingerprints.contains(contact.fingerprint)
+                            ? '${contact.displayName} (blocked)'
+                            : contact.displayName,
+                      ),
                       selected:
                           selectedContact?.fingerprint == contact.fingerprint,
                       onSelected: (_) => onSelectContact(contact.fingerprint),
@@ -1404,6 +2078,10 @@ class _ContactTargetCard extends StatelessWidget {
             if (selectedContact != null) ...[
               const SizedBox(height: 12),
               Text(selectedContact!.fingerprint),
+              if (isSelectedContactBlocked) ...[
+                const SizedBox(height: 4),
+                const Chip(label: Text('Blocked')),
+              ],
               if (selectedContact!.lastKnownAddress != null) ...[
                 const SizedBox(height: 4),
                 Text(selectedContact!.lastKnownAddress!),
@@ -1427,7 +2105,9 @@ class _ContactTargetCard extends StatelessWidget {
                   FilledButton.icon(
                     onPressed: onConnect,
                     icon: const Icon(Icons.wifi_tethering_outlined),
-                    label: const Text('Connect'),
+                    label: Text(
+                      isSelectedContactBlocked ? 'Blocked' : 'Connect',
+                    ),
                   ),
                 ],
               ),
@@ -1448,6 +2128,7 @@ class _PeerSessionCard extends StatelessWidget {
     required this.onReset,
     required this.onPasteInvite,
     required this.onHistoryAction,
+    this.isTargetBlocked = false,
     this.onConnect,
     this.onCopyInvitation,
     this.onCopyLink,
@@ -1463,6 +2144,7 @@ class _PeerSessionCard extends StatelessWidget {
   final Future<void> Function() onReset;
   final Future<void> Function() onPasteInvite;
   final Future<void> Function(PeerSessionHistoryAction action) onHistoryAction;
+  final bool isTargetBlocked;
   final Future<void> Function()? onConnect;
   final VoidCallback? onCopyInvitation;
   final VoidCallback? onCopyLink;
@@ -1516,9 +2198,11 @@ class _PeerSessionCard extends StatelessWidget {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
+                        if (isTargetBlocked)
+                          const Chip(label: Text('Blocked contact')),
                         if (showConnectAction)
                           FilledButton.icon(
-                            onPressed: onConnect,
+                            onPressed: isTargetBlocked ? null : onConnect,
                             icon: const Icon(Icons.wifi_tethering_outlined),
                             label: Text(
                               invitationDraft!.kind ==
@@ -1605,7 +2289,7 @@ class _PeerSessionCard extends StatelessWidget {
             children: [
               Expanded(
                 child: FilledButton.icon(
-                  onPressed: onStartOffer,
+                  onPressed: isTargetBlocked ? null : onStartOffer,
                   icon: const Icon(Icons.outbox_outlined),
                   label: Text(
                     selectedContact == null ? 'Start Offer' : 'New Offer',
@@ -1740,6 +2424,9 @@ class _PeerSessionCard extends StatelessWidget {
       return 'Exchange offer, answer, and ICE payloads';
     }
     if (selectedContact != null) {
+      if (isTargetBlocked) {
+        return 'Selected ${selectedContact.displayName}, but this contact is blocked.';
+      }
       return 'Selected ${selectedContact.displayName}. Connect to generate an offer and a ready-to-send invite.';
     }
     return 'Select a contact or paste a remote offer to answer manually';
