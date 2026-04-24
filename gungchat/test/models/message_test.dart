@@ -79,4 +79,26 @@ void main() {
     expect(message.audioFilePath, '/tmp/voice-message.ogg');
     expect(message.audioDurationMs, 4200);
   });
+
+  test('Message.previewText returns stable labels for audio and deleted messages', () {
+    final audioMessage = Message(
+      id: 'message-4',
+      conversationId: 'secure-peer',
+      senderId: 'peer-a',
+      body: '',
+      type: MessageType.audio,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime.utc(2026, 4, 23, 12, 6, 0),
+      isOutgoing: false,
+      audioFilePath: '/tmp/audio.ogg',
+      audioDurationMs: 1000,
+    );
+    final deletedMessage = audioMessage.copyWith(
+      deletedAt: DateTime.utc(2026, 4, 23, 12, 7, 0),
+      deleteMode: MessageDeleteMode.tombstone,
+    );
+
+    expect(audioMessage.previewText, 'Voice message');
+    expect(deletedMessage.previewText, 'Message deleted');
+  });
 }

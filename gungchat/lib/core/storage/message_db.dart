@@ -101,6 +101,27 @@ class MessageDatabase {
     );
   }
 
+  Future<Message?> getMessage(String messageId) async {
+    final rows = await _requireDatabase().rawQuery(
+      '''
+      SELECT
+        m.*,
+        CASE WHEN s.message_id IS NULL THEN 0 ELSE 1 END AS is_starred
+      FROM messages m
+      LEFT JOIN starred_messages s ON s.message_id = m.id
+      WHERE m.id = ?
+      LIMIT 1
+      ''',
+      [messageId],
+    );
+
+    if (rows.isEmpty) {
+      return null;
+    }
+
+    return Message.fromMap(rows.first);
+  }
+
   Future<void> updateDeliveryState(
     String messageId,
     MessageDeliveryState deliveryState,
