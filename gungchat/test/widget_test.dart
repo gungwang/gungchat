@@ -128,4 +128,44 @@ void main() {
 
     expect(toggledEmoji, '👍');
   });
+
+  testWidgets('message bubble renders star toggle', (
+    WidgetTester tester,
+  ) async {
+    var toggledStar = false;
+    final message = Message(
+      id: '4',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: 'bookmark me',
+      type: MessageType.text,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 36),
+      isOutgoing: true,
+      isStarred: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(12),
+            child: MessageBubble(
+              message: message,
+              onToggleStar: () {
+                toggledStar = true;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.byIcon(Icons.star), findsOneWidget);
+
+    await tester.tap(find.byIcon(Icons.star));
+    await tester.pump();
+
+    expect(toggledStar, isTrue);
+  });
 }
