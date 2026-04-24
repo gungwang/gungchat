@@ -170,6 +170,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     return '${compact.substring(0, 96)}...';
   }
 
+  String _replyPreviewForMessage(Message message) {
+    return _replyPreviewText(message.previewText);
+  }
+
   void _toggleReaction(Message message, String emoji) {
     unawaited(
       ref.read(peerSessionControllerProvider.notifier).toggleReaction(
@@ -322,7 +326,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               body: text,
               burnAfterRead: _burnAfterRead,
               replyToMessageId: replyingToMessage?.id,
-              replyToBody: replyingToMessage?.body,
+              replyToBody: replyingToMessage?.previewText,
             );
         if (sent) {
           _composerController.clear();
@@ -336,7 +340,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           body: text,
           burnAfterRead: _burnAfterRead,
           replyToMessageId: replyingToMessage?.id,
-          replyToBody: replyingToMessage?.body,
+          replyToBody: replyingToMessage?.previewText,
         );
         _composerController.clear();
         _clearReplyTarget();
@@ -464,7 +468,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               clip: clip,
               burnAfterRead: _burnAfterRead,
               replyToMessageId: replyingToMessage?.id,
-              replyToBody: replyingToMessage?.body,
+              replyToBody: replyingToMessage?.previewText,
             );
         if (sent) {
           _clearReplyTarget();
@@ -1073,7 +1077,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     ),
                                     const SizedBox(height: 4),
                                     Text(
-                                      _replyPreviewText(replyingToMessage.body),
+                                      _replyPreviewForMessage(replyingToMessage),
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: theme.textTheme.bodySmall,
@@ -1328,7 +1332,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       onToggleStar: message.type == MessageType.system || message.isDeleted
           ? null
           : () => _toggleStar(message),
-      onEdit: canManageMessages && !message.isDeleted
+        onEdit: canManageMessages &&
+            !message.isDeleted &&
+            message.type == MessageType.text
           ? () => _startEdit(message)
           : null,
       onDelete: canManageMessages

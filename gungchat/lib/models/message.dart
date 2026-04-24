@@ -76,6 +76,20 @@ class Message {
       type == MessageType.audio &&
       audioFilePath != null &&
       audioFilePath!.trim().isNotEmpty;
+  String get previewText {
+    if (isDeleted) {
+      return 'Message deleted';
+    }
+    if (type == MessageType.audio) {
+      return 'Voice message';
+    }
+
+    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    if (compact.isEmpty) {
+      return 'Message';
+    }
+    return compact;
+  }
 
   Message copyWith({
     String? id,

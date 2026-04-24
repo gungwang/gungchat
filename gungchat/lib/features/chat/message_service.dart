@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:cryptography/cryptography.dart';
 import 'package:uuid/uuid.dart';
 
@@ -25,6 +27,10 @@ class MessageService {
   Future<List<Message>> listMessages(String conversationId) async {
     await _messageDatabase.purgeExpiredMessages();
     return _messageDatabase.listMessages(conversationId);
+  }
+
+  Future<Message?> getMessage(String messageId) {
+    return _messageDatabase.getMessage(messageId);
   }
 
   Future<Message> createLocalMessage({
@@ -98,16 +104,20 @@ class MessageService {
     required String messageId,
     required DateTime deletedAt,
     required MessageDeleteMode mode,
-  }) {
-    return _messageDatabase.markMessageDeleted(
+  }) async {
+    final existingMessage = await _messageDatabase.getMessage(messageId);
+    await _messageDatabase.markMessageDeleted(
       messageId: messageId,
       deletedAt: deletedAt,
       mode: mode,
     );
+    await _deleteAudioFileIfPresent(existingMessage?.audioFilePath);
   }
 
-  Future<void> deleteMessage(String messageId) {
-    return _messageDatabase.deleteMessage(messageId);
+  Future<void> deleteMessage(String messageId) async {
+    final existingMessage = await _messageDatabase.getMessage(messageId);
+    await _messageDatabase.deleteMessage(messageId);
+    await _deleteAudioFileIfPresent(existingMessage?.audioFilePath);
   }
 
   Future<void> toggleStar(String messageId) {
@@ -132,5 +142,16 @@ class MessageService {
   }) {
     return _cryptoService.decryptString(
         payload: payload, secretKey: sharedSecret);
+  }
+
+  Future<void> _deleteAudioFileIfPresent(String? filePath) async {
+    if (filePath == null || filePath.trim().isEmpty) {
+      return;
+    }
+
+    final file = File(filePath);
+    if (await file.exists()) {
+      await file.delete();
+    }
   }
 }
