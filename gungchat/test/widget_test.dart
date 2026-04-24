@@ -65,7 +65,7 @@ void main() {
       createdAt: DateTime(2026, 4, 16, 9, 32),
       isOutgoing: false,
       replyToMessageId: '1',
-      replyToBody: 'earlier message body',
+      replyToBody: 'earlier ||secret|| body',
     );
 
     await tester.pumpWidget(
@@ -83,9 +83,9 @@ void main() {
     );
 
     expect(find.text('Quoted message'), findsOneWidget);
-    expect(find.text('earlier message body'), findsOneWidget);
+    expect(find.text('earlier Spoiler body'), findsOneWidget);
 
-    await tester.tap(find.text('earlier message body'));
+    await tester.tap(find.text('earlier Spoiler body'));
     await tester.pump();
 
     expect(jumpInvoked, isTrue);
@@ -320,5 +320,69 @@ void main() {
 
     expect(find.text('Example Domain'), findsOneWidget);
     expect(find.text('Preview description'), findsOneWidget);
+  });
+
+  testWidgets('message bubble hides spoiler text until tapped', (
+    WidgetTester tester,
+  ) async {
+    final message = Message(
+      id: '9',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: 'Keep ||top secret|| safe',
+      type: MessageType.text,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 46),
+      isOutgoing: false,
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        MessageBubble(message: message),
+      ),
+    );
+
+    expect(find.byKey(const ValueKey('spoiler-segment-1')), findsOneWidget);
+    expect(find.text('Keep top secret safe', findRichText: true), findsNothing);
+
+    await tester.tap(find.byKey(const ValueKey('spoiler-segment-1')));
+    await tester.pump();
+
+    expect(find.byKey(const ValueKey('spoiler-segment-1')), findsNothing);
+    expect(find.text('Keep top secret safe', findRichText: true), findsOneWidget);
+  });
+
+  testWidgets('message bubble does not preview links hidden in spoilers', (
+    WidgetTester tester,
+  ) async {
+    final message = Message(
+      id: '10',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: 'Hold ||https://example.com|| back',
+      type: MessageType.text,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 47),
+      isOutgoing: false,
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        MessageBubble(message: message),
+        overrides: [
+          linkPreviewProvider.overrideWith(
+            (ref, url) async => const LinkPreview(
+              url: 'https://example.com',
+              title: 'Example Domain',
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 100));
+
+    expect(find.text('Example Domain'), findsNothing);
+    expect(find.byKey(const ValueKey('spoiler-segment-1')), findsOneWidget);
   });
 }

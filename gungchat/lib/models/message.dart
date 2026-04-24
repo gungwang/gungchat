@@ -2,6 +2,8 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 
+import 'package:gungchat/core/text/spoiler_renderer.dart';
+
 enum MessageType {
   text,
   image,
@@ -84,7 +86,7 @@ class Message {
       return 'Voice message';
     }
 
-    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final compact = SpoilerRenderer.previewText(body);
     if (compact.isEmpty) {
       return 'Message';
     }

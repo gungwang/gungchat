@@ -101,4 +101,19 @@ void main() {
     expect(audioMessage.previewText, 'Voice message');
     expect(deletedMessage.previewText, 'Message deleted');
   });
+
+  test('Message.previewText redacts spoiler content', () {
+    final message = Message(
+      id: 'message-5',
+      conversationId: 'secure-peer',
+      senderId: 'peer-a',
+      body: 'keep ||launch code|| hidden',
+      type: MessageType.text,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime.utc(2026, 4, 23, 12, 8, 0),
+      isOutgoing: false,
+    );
+
+    expect(message.previewText, 'keep Spoiler hidden');
+  });
 }
