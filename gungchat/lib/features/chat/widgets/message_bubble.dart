@@ -15,6 +15,8 @@ class MessageBubble extends StatelessWidget {
     this.onToggleStar,
     this.onEdit,
     this.onDelete,
+    this.onPlayAudio,
+    this.isPlayingAudio = false,
   });
 
   final Message message;
@@ -26,6 +28,8 @@ class MessageBubble extends StatelessWidget {
   final VoidCallback? onToggleStar;
   final VoidCallback? onEdit;
   final ValueChanged<MessageDeleteMode>? onDelete;
+  final VoidCallback? onPlayAudio;
+  final bool isPlayingAudio;
 
   @override
   Widget build(BuildContext context) {
@@ -230,17 +234,25 @@ class MessageBubble extends StatelessWidget {
   }
 
   Widget _buildBody(ThemeData theme) {
-    if (!message.isDeleted) {
-      return Text(message.body);
+    if (message.isDeleted) {
+      return Text(
+        'Message deleted',
+        style: theme.textTheme.bodyMedium?.copyWith(
+          fontStyle: FontStyle.italic,
+          color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
     }
 
-    return Text(
-      'Message deleted',
-      style: theme.textTheme.bodyMedium?.copyWith(
-        fontStyle: FontStyle.italic,
-        color: theme.colorScheme.onSurfaceVariant,
-      ),
-    );
+    if (message.type == MessageType.audio && message.hasAudio) {
+      return _AudioMessagePreview(
+        durationLabel: _formatDuration(message.audioDurationMs),
+        onPlayAudio: onPlayAudio,
+        isPlayingAudio: isPlayingAudio,
+      );
+    }
+
+    return Text(message.body);
   }
 
   String? _replyPreviewText() {
@@ -270,6 +282,79 @@ class MessageBubble extends StatelessWidget {
     final hour = value.hour.toString().padLeft(2, '0');
     final minute = value.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
+  }
+
+  String _formatDuration(int? durationMs) {
+    if (durationMs == null || durationMs <= 0) {
+      return '0:00';
+    }
+
+    final totalSeconds = (durationMs / 1000).ceil();
+    final minutes = totalSeconds ~/ 60;
+    final seconds = totalSeconds % 60;
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+class _AudioMessagePreview extends StatelessWidget {
+  const _AudioMessagePreview({
+    required this.durationLabel,
+    required this.onPlayAudio,
+    required this.isPlayingAudio,
+  });
+
+  final String durationLabel;
+  final VoidCallback? onPlayAudio;
+  final bool isPlayingAudio;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final barHeights = const <double>[8, 14, 10, 18, 12, 16, 9, 15, 11, 7];
+
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        IconButton(
+          tooltip: isPlayingAudio ? 'Stop voice message' : 'Play voice message',
+          onPressed: onPlayAudio,
+          icon: Icon(isPlayingAudio ? Icons.stop_circle : Icons.play_circle),
+          visualDensity: VisualDensity.compact,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints.tightFor(width: 32, height: 32),
+        ),
+        const SizedBox(width: 8),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                'Voice message',
+                style: theme.textTheme.bodyMedium,
+              ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  for (final height in barHeights) ...[
+                    Container(
+                      width: 4,
+                      height: height,
+                      decoration: BoxDecoration(
+                        color: theme.colorScheme.primary,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                    const SizedBox(width: 3),
+                  ],
+                ],
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(width: 8),
+        Text(durationLabel, style: theme.textTheme.labelMedium),
+      ],
+    );
   }
 }
 

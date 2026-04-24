@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:flutter_webrtc/flutter_webrtc.dart';
 
+import 'data_channel_text_framer.dart';
 import 'ice_manager.dart';
 
 enum WebRtcSessionState {
@@ -14,9 +15,14 @@ enum WebRtcSessionState {
 }
 
 class WebRtcManager {
-  WebRtcManager({required IceManager iceManager}) : _iceManager = iceManager;
+  WebRtcManager({
+    required IceManager iceManager,
+    DataChannelTextFramer? textFramer,
+  })  : _iceManager = iceManager,
+        _textFramer = textFramer ?? DataChannelTextFramer();
 
   final IceManager _iceManager;
+  final DataChannelTextFramer _textFramer;
   final StreamController<WebRtcSessionState> _stateController =
       StreamController<WebRtcSessionState>.broadcast();
 
@@ -86,7 +92,9 @@ class WebRtcManager {
     if (!isOpen) {
       throw StateError('RTC data channel is not open.');
     }
-    await _dataChannel!.send(RTCDataChannelMessage(message));
+    for (final frame in _textFramer.frame(message)) {
+      await _dataChannel!.send(RTCDataChannelMessage(frame));
+    }
   }
 
   Future<void> close() async {
@@ -95,6 +103,7 @@ class WebRtcManager {
     await _peerConnection?.close();
     _dataChannel = null;
     _peerConnection = null;
+    _textFramer.clear();
   }
 
   void _bindDataChannel(
@@ -118,7 +127,10 @@ class WebRtcManager {
       }
       ..onMessage = (message) {
         if (!message.isBinary) {
-          onMessage(message.text);
+          final reassembledMessage = _textFramer.consumeFrame(message.text);
+          if (reassembledMessage != null) {
+            onMessage(reassembledMessage);
+          }
         }
       };
   }

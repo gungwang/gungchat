@@ -17,7 +17,7 @@ class MessageDatabase {
 
     _database = await openDatabase(
       databasePath,
-      version: 5,
+      version: 6,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE messages(
@@ -36,7 +36,9 @@ class MessageDatabase {
             reactions_json TEXT,
             edited_at TEXT,
             deleted_at TEXT,
-            delete_mode TEXT
+            delete_mode TEXT,
+            audio_file_path TEXT,
+            audio_duration_ms INTEGER
           )
         ''');
         await database.execute('''
@@ -77,6 +79,14 @@ class MessageDatabase {
           );
           await database.execute(
             'ALTER TABLE messages ADD COLUMN delete_mode TEXT',
+          );
+        }
+        if (oldVersion < 6) {
+          await database.execute(
+            'ALTER TABLE messages ADD COLUMN audio_file_path TEXT',
+          );
+          await database.execute(
+            'ALTER TABLE messages ADD COLUMN audio_duration_ms INTEGER',
           );
         }
       },
@@ -157,9 +167,12 @@ class MessageDatabase {
       'messages',
       <String, Object?>{
         'body': body,
+        'type': MessageType.text.name,
         'edited_at': editedAt.toIso8601String(),
         'deleted_at': null,
         'delete_mode': null,
+        'audio_file_path': null,
+        'audio_duration_ms': null,
       },
       where: 'id = ?',
       whereArgs: [messageId],
@@ -186,6 +199,8 @@ class MessageDatabase {
         'edited_at': null,
         'deleted_at': deletedAt.toIso8601String(),
         'delete_mode': mode.name,
+        'audio_file_path': null,
+        'audio_duration_ms': null,
       },
       where: 'id = ?',
       whereArgs: [messageId],

@@ -16,9 +16,12 @@ import '../../models/message.dart';
 import 'message_service.dart';
 import 'presence_status.dart';
 import 'reaction_service.dart';
+import 'voice_message_payload.dart';
+import 'voice_message_service.dart';
 
 typedef LoadLocalIdentity = Future<DeviceIdentity> Function();
 typedef LoadMessageService = Future<MessageService> Function();
+typedef LoadVoiceMessageService = VoiceMessageService Function();
 typedef RefreshConversationMessages = void Function(String conversationId);
 
 enum PeerSessionRole {
@@ -202,6 +205,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   PeerSessionController({
     required LoadLocalIdentity loadIdentity,
     required LoadMessageService loadMessageService,
+    required LoadVoiceMessageService loadVoiceMessageService,
     required RefreshConversationMessages refreshConversation,
     required ReactionService reactionService,
     required WebRtcManager webRtcManager,
@@ -210,6 +214,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     Uuid? uuid,
   })  : _loadIdentity = loadIdentity,
         _loadMessageService = loadMessageService,
+      _loadVoiceMessageService = loadVoiceMessageService,
         _refreshConversation = refreshConversation,
         _reactionService = reactionService,
         _webRtcManager = webRtcManager,
@@ -222,6 +227,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
 
   final LoadLocalIdentity _loadIdentity;
   final LoadMessageService _loadMessageService;
+  final LoadVoiceMessageService _loadVoiceMessageService;
   final RefreshConversationMessages _refreshConversation;
   final ReactionService _reactionService;
   final WebRtcManager _webRtcManager;
@@ -385,6 +391,82 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       );
       _refreshConversation(conversationId);
       _setError('Secure send failed: $error');
+      return false;
+    }
+  }
+
+  Future<bool> sendVoiceMessage({
+    required RecordedVoiceClip clip,
+    required bool burnAfterRead,
+    String? replyToMessageId,
+    String? replyToBody,
+  }) async {
+    final conversationId = state.conversationId;
+    final sharedSecret = _sharedSecret;
+    if (conversationId == null ||
+        sharedSecret == null ||
+        !state.isTransportReady) {
+      _setError(
+        'The secure data channel is not open yet. Finish the signal exchange first.',
+      );
+      return false;
+    }
+
+    final identity = await _ensureLocalIdentity();
+    final messageService = await _loadMessageService();
+    final voiceMessageService = _loadVoiceMessageService();
+
+    final message = await messageService.createLocalMessage(
+      conversationId: conversationId,
+      senderId: identity.fingerprint,
+      body: '',
+      type: MessageType.audio,
+      burnAfterRead: burnAfterRead,
+      deliveryState: MessageDeliveryState.sending,
+      replyToMessageId: replyToMessageId,
+      replyToBody: replyToBody,
+      audioFilePath: clip.filePath,
+      audioDurationMs: clip.durationMs,
+    );
+    _refreshConversation(conversationId);
+
+    try {
+      final payloadText = VoiceMessagePayload(
+        bytes: await voiceMessageService.loadClipBytes(clip.filePath),
+        durationMs: clip.durationMs,
+        mimeType: clip.mimeType,
+      ).encodeTransportString();
+      final encryptedPayload = await messageService.encryptForTransport(
+        body: payloadText,
+        sharedSecret: sharedSecret,
+      );
+      final transportEnvelope = PeerTransportEnvelope.message(
+        messageId: message.id,
+        senderFingerprint: identity.fingerprint,
+        payload: encryptedPayload,
+        createdAt: message.createdAt,
+        burnAfterRead: burnAfterRead,
+        expiresAt: message.expiresAt,
+        replyToMessageId: message.replyToMessageId,
+        replyToBody: message.replyToBody,
+      );
+
+      await clearLocalTyping(notifyPeer: false);
+      await _webRtcManager.sendText(transportEnvelope.encodeTransportString());
+      await messageService.updateDeliveryState(
+        message.id,
+        MessageDeliveryState.sent,
+      );
+      _refreshConversation(conversationId);
+      state = state.copyWith(lastEvent: 'Secure voice message sent.');
+      return true;
+    } catch (error) {
+      await messageService.updateDeliveryState(
+        message.id,
+        MessageDeliveryState.failed,
+      );
+      _refreshConversation(conversationId);
+      _setError('Secure voice send failed: $error');
       return false;
     }
   }
@@ -938,21 +1020,47 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       final conversationId = state.conversationId ??
           conversationIdForFingerprint(envelope.senderFingerprint);
 
+      final voicePayload = VoiceMessagePayload.tryDecodeTransportString(body);
+      final message = voicePayload == null
+          ? Message(
+              id: messageId,
+              conversationId: conversationId,
+              senderId: envelope.senderFingerprint,
+              body: body,
+              type: MessageType.text,
+              deliveryState: MessageDeliveryState.delivered,
+              createdAt: envelope.createdAt,
+              isOutgoing: false,
+              burnAfterRead: envelope.burnAfterRead ?? true,
+              expiresAt: envelope.expiresAt,
+              replyToMessageId: envelope.replyToMessageId,
+              replyToBody: envelope.replyToBody,
+            )
+          : Message(
+              id: messageId,
+              conversationId: conversationId,
+              senderId: envelope.senderFingerprint,
+              body: '',
+              type: MessageType.audio,
+              deliveryState: MessageDeliveryState.delivered,
+              createdAt: envelope.createdAt,
+              isOutgoing: false,
+              burnAfterRead: envelope.burnAfterRead ?? true,
+              expiresAt: envelope.expiresAt,
+              replyToMessageId: envelope.replyToMessageId,
+              replyToBody: envelope.replyToBody,
+              audioFilePath: await _loadVoiceMessageService().saveInboundClipBytes(
+                bytes: voicePayload.bytes,
+                messageId: messageId,
+                extension: voicePayload.mimeType.endsWith('ogg')
+                    ? '.ogg'
+                    : '.audio',
+              ),
+              audioDurationMs: voicePayload.durationMs,
+            );
+
       await messageService.saveInboundMessage(
-        Message(
-          id: messageId,
-          conversationId: conversationId,
-          senderId: envelope.senderFingerprint,
-          body: body,
-          type: MessageType.text,
-          deliveryState: MessageDeliveryState.delivered,
-          createdAt: envelope.createdAt,
-          isOutgoing: false,
-          burnAfterRead: envelope.burnAfterRead ?? true,
-          expiresAt: envelope.expiresAt,
-          replyToMessageId: envelope.replyToMessageId,
-          replyToBody: envelope.replyToBody,
-        ),
+        message,
       );
       await _sendDeliveryReceipt(messageId);
       _refreshConversation(conversationId);
@@ -961,7 +1069,9 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         remoteFingerprint: envelope.senderFingerprint,
         conversationId: conversationId,
         isRemoteTyping: false,
-        lastEvent: 'Secure message received.',
+        lastEvent: voicePayload == null
+            ? 'Secure message received.'
+            : 'Secure voice message received.',
       );
     } catch (error) {
       _setError('Incoming peer message failed to process: $error');
