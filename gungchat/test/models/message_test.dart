@@ -50,4 +50,33 @@ void main() {
     expect(message.editedAt, isNotNull);
     expect(message.deletedAt, isNotNull);
   });
+
+  test('Message.fromMap reads audio message metadata', () {
+    final message = Message.fromMap({
+      'id': 'message-3',
+      'conversation_id': 'secure-peer',
+      'sender_id': 'peer-a',
+      'body': '',
+      'type': 'audio',
+      'delivery_state': 'sent',
+      'created_at': DateTime.utc(2026, 4, 23, 12, 5, 0).toIso8601String(),
+      'is_outgoing': 0,
+      'burn_after_read': 1,
+      'expires_at': null,
+      'reply_to_message_id': null,
+      'reply_to_body': null,
+      'reactions_json': null,
+      'edited_at': null,
+      'deleted_at': null,
+      'delete_mode': null,
+      'audio_file_path': '/tmp/voice-message.ogg',
+      'audio_duration_ms': 4200,
+      'is_starred': 0,
+    });
+
+    expect(message.type, MessageType.audio);
+    expect(message.hasAudio, isTrue);
+    expect(message.audioFilePath, '/tmp/voice-message.ogg');
+    expect(message.audioDurationMs, 4200);
+  });
 }

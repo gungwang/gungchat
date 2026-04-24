@@ -20,6 +20,7 @@ import '../features/chat/reaction_service.dart';
 import '../features/chat/message_service.dart';
 import '../features/chat/presence_status.dart';
 import '../features/chat/peer_session_controller.dart';
+import '../features/chat/voice_message_service.dart';
 import '../features/contacts/contact_book_controller.dart';
 import '../features/contacts/contact_book_storage.dart';
 import '../features/contacts/contact_exchange_service.dart';
@@ -142,11 +143,20 @@ final messageServiceProvider = FutureProvider<MessageService>((ref) async {
   );
 });
 
+final voiceMessageServiceProvider = ChangeNotifierProvider<VoiceMessageService>(
+  (ref) {
+    final service = VoiceMessageService();
+    ref.onDispose(service.dispose);
+    return service;
+  },
+);
+
 final peerSessionControllerProvider =
     StateNotifierProvider<PeerSessionController, PeerSessionState>((ref) {
   final controller = PeerSessionController(
     loadIdentity: () => ref.read(keyManagerProvider).getOrCreateIdentity(),
     loadMessageService: () => ref.read(messageServiceProvider.future),
+    loadVoiceMessageService: () => ref.read(voiceMessageServiceProvider),
     refreshConversation: (conversationId) {
       ref.invalidate(conversationMessagesProvider(conversationId));
     },

@@ -5,6 +5,7 @@ import 'package:flutter/foundation.dart';
 enum MessageType {
   text,
   image,
+  audio,
   system,
 }
 
@@ -42,6 +43,8 @@ class Message {
     this.editedAt,
     this.deletedAt,
     this.deleteMode,
+    this.audioFilePath,
+    this.audioDurationMs,
   });
 
   final String id;
@@ -61,12 +64,18 @@ class Message {
   final DateTime? editedAt;
   final DateTime? deletedAt;
   final MessageDeleteMode? deleteMode;
+  final String? audioFilePath;
+  final int? audioDurationMs;
 
   bool get isExpired => expiresAt != null && expiresAt!.isBefore(DateTime.now());
   bool get hasReply => replyToBody != null && replyToBody!.trim().isNotEmpty;
   bool get hasReactions => reactions.isNotEmpty;
   bool get isEdited => editedAt != null && !isDeleted;
   bool get isDeleted => deletedAt != null;
+  bool get hasAudio =>
+      type == MessageType.audio &&
+      audioFilePath != null &&
+      audioFilePath!.trim().isNotEmpty;
 
   Message copyWith({
     String? id,
@@ -91,6 +100,10 @@ class Message {
     bool clearDeletedAt = false,
     MessageDeleteMode? deleteMode,
     bool clearDeleteMode = false,
+    String? audioFilePath,
+    bool clearAudioFilePath = false,
+    int? audioDurationMs,
+    bool clearAudioDurationMs = false,
   }) {
     return Message(
       id: id ?? this.id,
@@ -111,6 +124,11 @@ class Message {
       editedAt: clearEditedAt ? null : editedAt ?? this.editedAt,
       deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
       deleteMode: clearDeleteMode ? null : deleteMode ?? this.deleteMode,
+      audioFilePath:
+          clearAudioFilePath ? null : audioFilePath ?? this.audioFilePath,
+      audioDurationMs: clearAudioDurationMs
+          ? null
+          : audioDurationMs ?? this.audioDurationMs,
     );
   }
 
@@ -163,6 +181,8 @@ class Message {
       'edited_at': editedAt?.toIso8601String(),
       'deleted_at': deletedAt?.toIso8601String(),
       'delete_mode': deleteMode?.name,
+      'audio_file_path': audioFilePath,
+      'audio_duration_ms': audioDurationMs,
     };
   }
 
@@ -195,6 +215,8 @@ class Message {
       deleteMode: map['delete_mode'] == null
           ? null
           : MessageDeleteMode.values.byName(map['delete_mode']! as String),
+      audioFilePath: map['audio_file_path'] as String?,
+      audioDurationMs: map['audio_duration_ms'] as int?,
     );
   }
 }

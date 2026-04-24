@@ -41,6 +41,8 @@
 	<true/>
 	<key>NSCameraUsageDescription</key>
 	<string>GungChat uses the camera to scan peer QR codes for direct encrypted contact exchange.</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>GungChat uses the microphone to record encrypted voice messages for direct peer conversations.</string>
 	<key>NSBonjourServices</key>
 	<array>
 		<string>_gungchat._udp</string>

@@ -40,6 +40,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   void dispose() {
+    unawaited(ref.read(voiceMessageServiceProvider).cancelRecording());
+    unawaited(ref.read(voiceMessageServiceProvider).stopPlayback());
     _highlightClearTimer?.cancel();
     _composerController.dispose();
     _signalController.dispose();
@@ -440,6 +442,80 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  Future<void> _toggleVoiceRecording({
+    required bool canSendSecure,
+    required Message? replyingToMessage,
+  }) async {
+    final voiceMessageService = ref.read(voiceMessageServiceProvider);
+
+    if (voiceMessageService.isRecording) {
+      final clip = await voiceMessageService.stopRecording();
+      if (clip == null) {
+        return;
+      }
+
+      setState(() {
+        _sending = true;
+      });
+      try {
+        final sent = await ref
+            .read(peerSessionControllerProvider.notifier)
+            .sendVoiceMessage(
+              clip: clip,
+              burnAfterRead: _burnAfterRead,
+              replyToMessageId: replyingToMessage?.id,
+              replyToBody: replyingToMessage?.body,
+            );
+        if (sent) {
+          _clearReplyTarget();
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _sending = false;
+          });
+        }
+      }
+      return;
+    }
+
+    if (!canSendSecure) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text(
+              'Open the secure channel before recording voice messages.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
+    final started = await voiceMessageService.startRecording();
+    if (!started && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text(
+            'Microphone access is required to record voice messages.',
+          ),
+        ),
+      );
+    }
+  }
+
+  Future<void> _toggleVoicePlayback(Message message) async {
+    final filePath = message.audioFilePath;
+    if (filePath == null) {
+      return;
+    }
+
+    await ref.read(voiceMessageServiceProvider).togglePlayback(
+          messageId: message.id,
+          filePath: filePath,
+        );
+  }
+
   String _typingPeerLabel(
     PeerSessionState sessionState,
     Contact? selectedContact,
@@ -723,6 +799,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final theme = Theme.of(context);
     final identityAsync = ref.watch(deviceIdentityProvider);
     final localUserId = identityAsync.asData?.value.fingerprint;
+    final voiceMessageService = ref.watch(voiceMessageServiceProvider);
     final networkAsync = ref.watch(networkStatusProvider);
     final peerSession = ref.watch(peerSessionControllerProvider);
     final savedContacts = ref.watch(contactBookProvider);
@@ -750,6 +827,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final canSaveLocal =
         selectedContact == null && !peerSession.isSessionActive;
     final composerEnabled = canSendSecure || canSaveLocal;
+    final isRecordingVoice = voiceMessageService.isRecording;
     final selectedUri = selectedContact?.lastKnownAddress == null
         ? null
         : ref.read(discoveryServiceProvider).buildManualConnectionUri(
@@ -804,6 +882,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     null;
                 ref.read(pendingPeerConnectIntentProvider.notifier).state =
                     null;
+                unawaited(ref.read(voiceMessageServiceProvider).cancelRecording());
+                unawaited(ref.read(voiceMessageServiceProvider).stopPlayback());
                 _highlightClearTimer?.cancel();
                 setState(() {
                   _editingMessage = null;
@@ -842,6 +922,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 await ref
                     .read(peerSessionControllerProvider.notifier)
                     .resetSession();
+                await ref.read(voiceMessageServiceProvider).cancelRecording();
+                await ref.read(voiceMessageServiceProvider).stopPlayback();
                 if (mounted) {
                   _signalController.clear();
                   _highlightClearTimer?.cancel();
@@ -1051,12 +1133,39 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                       ),
                     ],
+                    if (isRecordingVoice) ...[
+                      const SizedBox(height: 12),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: theme.colorScheme.errorContainer,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 10,
+                          ),
+                          child: Row(
+                            children: [
+                              const Icon(Icons.mic),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: Text(
+                                  'Recording voice message... tap Stop & Send when ready. Up to 2 minutes.',
+                                  style: theme.textTheme.bodyMedium,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       controller: _composerController,
                       maxLines: 3,
                       minLines: 1,
-                      enabled: composerEnabled,
+                      enabled: composerEnabled && !isRecordingVoice,
                       onChanged: canSendSecure
                           ? (value) {
                               ref
@@ -1105,7 +1214,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       value: _burnAfterRead,
-                      onChanged: editingMessage != null
+                      onChanged: editingMessage != null || isRecordingVoice
                           ? null
                           : (value) {
                         setState(() {
@@ -1122,39 +1231,71 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       ),
                     ),
                     const SizedBox(height: 8),
-                    SizedBox(
-                      width: double.infinity,
-                      child: FilledButton.icon(
-                        onPressed: identityAsync.asData == null ||
-                                _sending ||
-                                !composerEnabled
-                            ? null
-                            : () => _submitComposer(
-                                  identityAsync.requireValue,
-                                  selectedContact,
-                                  replyingToMessage: replyingToMessage,
-                                  editingMessage: editingMessage,
-                                ),
-                        icon: _sending
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : Icon(
-                                editingMessage != null ? Icons.check : Icons.send,
+                    Row(
+                      children: [
+                        if (canSendSecure) ...[
+                          Expanded(
+                            child: OutlinedButton.icon(
+                              onPressed: identityAsync.asData == null ||
+                                      _sending ||
+                                      editingMessage != null
+                                  ? null
+                                  : () => _toggleVoiceRecording(
+                                        canSendSecure: canSendSecure,
+                                        replyingToMessage: replyingToMessage,
+                                      ),
+                              icon: Icon(
+                                isRecordingVoice
+                                    ? Icons.stop_circle_outlined
+                                    : Icons.mic_none,
                               ),
-                        label: Text(
-                          editingMessage != null
-                              ? 'Save Message Edit'
-                              : canSendSecure
-                              ? 'Send Secure Message'
-                              : canSaveLocal
-                                  ? 'Save Local Message'
-                                  : 'Wait For Secure Channel',
+                              label: Text(
+                                isRecordingVoice
+                                    ? 'Stop & Send Voice'
+                                    : 'Record Voice',
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                        ],
+                        Expanded(
+                          child: FilledButton.icon(
+                            onPressed: identityAsync.asData == null ||
+                                    _sending ||
+                                    !composerEnabled ||
+                                    isRecordingVoice
+                                ? null
+                                : () => _submitComposer(
+                                      identityAsync.requireValue,
+                                      selectedContact,
+                                      replyingToMessage: replyingToMessage,
+                                      editingMessage: editingMessage,
+                                    ),
+                            icon: _sending
+                                ? const SizedBox(
+                                    width: 18,
+                                    height: 18,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 2,
+                                    ),
+                                  )
+                                : Icon(
+                                    editingMessage != null
+                                        ? Icons.check
+                                        : Icons.send,
+                                  ),
+                            label: Text(
+                              editingMessage != null
+                                  ? 'Save Message Edit'
+                                  : canSendSecure
+                                      ? 'Send Secure Message'
+                                      : canSaveLocal
+                                          ? 'Save Local Message'
+                                          : 'Wait For Secure Channel',
+                            ),
+                          ),
                         ),
-                      ),
+                      ],
                     ),
                   ],
                 ),
@@ -1173,11 +1314,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     required bool canToggleReactions,
     required bool canManageMessages,
   }) {
+    final voiceMessageService = ref.watch(voiceMessageServiceProvider);
     return MessageBubble(
       key: _messageKeyFor(message.id),
       message: message,
       isHighlighted: _highlightedMessageId == message.id,
       currentUserId: localUserId,
+      onPlayAudio: message.hasAudio ? () => _toggleVoicePlayback(message) : null,
+      isPlayingAudio: voiceMessageService.playingMessageId == message.id,
       onReply: message.type == MessageType.system || message.isDeleted
           ? null
           : () => _startReply(message),

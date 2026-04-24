@@ -260,4 +260,46 @@ void main() {
     expect(find.text('Message deleted'), findsOneWidget);
     expect(find.textContaining('• deleted'), findsOneWidget);
   });
+
+  testWidgets('message bubble renders audio playback affordance', (
+    WidgetTester tester,
+  ) async {
+    var playedAudio = false;
+    final message = Message(
+      id: '7',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: '',
+      type: MessageType.audio,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 44),
+      isOutgoing: false,
+      audioFilePath: '/tmp/audio-message.ogg',
+      audioDurationMs: 4200,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(12),
+            child: MessageBubble(
+              message: message,
+              onPlayAudio: () {
+                playedAudio = true;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Voice message'), findsOneWidget);
+    expect(find.text('0:05'), findsOneWidget);
+
+    await tester.tap(find.byTooltip('Play voice message'));
+    await tester.pump();
+
+    expect(playedAudio, isTrue);
+  });
 }

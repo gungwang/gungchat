@@ -31,18 +31,21 @@ class MessageService {
     required String conversationId,
     required String senderId,
     required String body,
+    MessageType type = MessageType.text,
     bool burnAfterRead = true,
     Duration? ttl,
     MessageDeliveryState deliveryState = MessageDeliveryState.local,
     String? replyToMessageId,
     String? replyToBody,
+    String? audioFilePath,
+    int? audioDurationMs,
   }) async {
     final message = Message(
       id: _uuid.v4(),
       conversationId: conversationId,
       senderId: senderId,
       body: body,
-      type: MessageType.text,
+      type: type,
       deliveryState: deliveryState,
       createdAt: DateTime.now(),
       isOutgoing: true,
@@ -53,6 +56,8 @@ class MessageService {
       ),
       replyToMessageId: replyToMessageId,
       replyToBody: replyToBody,
+      audioFilePath: audioFilePath,
+      audioDurationMs: audioDurationMs,
     );
 
     await _messageDatabase.upsertMessage(message);
