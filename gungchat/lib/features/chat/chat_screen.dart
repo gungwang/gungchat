@@ -147,6 +147,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  void _toggleStar(Message message) {
+    unawaited(() async {
+      final messageService = await ref.read(messageServiceProvider.future);
+      await messageService.toggleStar(message.id);
+      ref.invalidate(conversationMessagesProvider(message.conversationId));
+    }());
+  }
+
   Future<void> _copyInvitationDraft(
     PeerInvitationDraft draft,
     Contact? selectedContact,
@@ -986,6 +994,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       onReply: message.type == MessageType.system
           ? null
           : () => _startReply(message),
+        onToggleStar: message.type == MessageType.system
+          ? null
+          : () => _toggleStar(message),
       onToggleReaction: canToggleReactions
           ? (emoji) => _toggleReaction(message, emoji)
           : null,

@@ -77,6 +77,14 @@ class MessageService {
     return _messageDatabase.updateReactions(messageId, reactions);
   }
 
+  Future<void> toggleStar(String messageId) {
+    return _messageDatabase.toggleStar(messageId);
+  }
+
+  Future<List<Message>> listStarredMessages() {
+    return _messageDatabase.listStarredMessages();
+  }
+
   Future<EncryptedPayload> encryptForTransport({
     required String body,
     required SecretKey sharedSecret,

@@ -12,6 +12,7 @@ class MessageBubble extends StatelessWidget {
     this.isHighlighted = false,
     this.currentUserId,
     this.onToggleReaction,
+    this.onToggleStar,
   });
 
   final Message message;
@@ -20,6 +21,7 @@ class MessageBubble extends StatelessWidget {
   final bool isHighlighted;
   final String? currentUserId;
   final ValueChanged<String>? onToggleReaction;
+  final VoidCallback? onToggleStar;
 
   @override
   Widget build(BuildContext context) {
@@ -89,9 +91,31 @@ class MessageBubble extends StatelessWidget {
           ],
           Text(message.body),
           const SizedBox(height: 8),
-          Text(
-            _metadataLabel(),
-            style: theme.textTheme.labelSmall,
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              Expanded(
+                child: Text(
+                  _metadataLabel(),
+                  style: theme.textTheme.labelSmall,
+                ),
+              ),
+              if (onToggleStar != null)
+                IconButton(
+                  tooltip: message.isStarred ? 'Remove star' : 'Star message',
+                  onPressed: onToggleStar,
+                  icon: Icon(
+                    message.isStarred ? Icons.star : Icons.star_border,
+                    size: 18,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 28,
+                  ),
+                ),
+            ],
           ),
           if (reactionEntries.isNotEmpty || onToggleReaction != null) ...[
             const SizedBox(height: 8),

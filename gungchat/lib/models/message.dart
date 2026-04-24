@@ -33,6 +33,7 @@ class Message {
     this.replyToMessageId,
     this.replyToBody,
     this.reactions = const {},
+    this.isStarred = false,
   });
 
   final String id;
@@ -48,6 +49,7 @@ class Message {
   final String? replyToMessageId;
   final String? replyToBody;
   final Map<String, List<String>> reactions;
+  final bool isStarred;
 
   bool get isExpired => expiresAt != null && expiresAt!.isBefore(DateTime.now());
   bool get hasReply => replyToBody != null && replyToBody!.trim().isNotEmpty;
@@ -69,6 +71,7 @@ class Message {
     String? replyToBody,
     bool clearReplyTo = false,
     Map<String, List<String>>? reactions,
+    bool? isStarred,
   }) {
     return Message(
       id: id ?? this.id,
@@ -85,6 +88,7 @@ class Message {
           clearReplyTo ? null : replyToMessageId ?? this.replyToMessageId,
       replyToBody: clearReplyTo ? null : replyToBody ?? this.replyToBody,
       reactions: reactions ?? this.reactions,
+      isStarred: isStarred ?? this.isStarred,
     );
   }
 
@@ -156,6 +160,7 @@ class Message {
       replyToMessageId: map['reply_to_message_id'] as String?,
       replyToBody: map['reply_to_body'] as String?,
       reactions: decodeReactions(map['reactions_json']),
+      isStarred: (map['is_starred'] as int?) == 1,
     );
   }
 }

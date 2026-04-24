@@ -17,7 +17,7 @@ class MessageDatabase {
 
     _database = await openDatabase(
       databasePath,
-      version: 3,
+      version: 4,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE messages(
@@ -36,6 +36,12 @@ class MessageDatabase {
             reactions_json TEXT
           )
         ''');
+        await database.execute('''
+          CREATE TABLE starred_messages(
+            message_id TEXT PRIMARY KEY,
+            starred_at TEXT NOT NULL
+          )
+        ''');
       },
       onUpgrade: (database, oldVersion, newVersion) async {
         if (oldVersion < 2) {
@@ -50,6 +56,14 @@ class MessageDatabase {
           await database.execute(
             'ALTER TABLE messages ADD COLUMN reactions_json TEXT',
           );
+        }
+        if (oldVersion < 4) {
+          await database.execute('''
+            CREATE TABLE starred_messages(
+              message_id TEXT PRIMARY KEY,
+              starred_at TEXT NOT NULL
+            )
+          ''');
         }
       },
     );
@@ -91,13 +105,61 @@ class MessageDatabase {
     );
   }
 
-  Future<List<Message>> listMessages(String conversationId) async {
-    final rows = await _requireDatabase().query(
-      'messages',
-      where: 'conversation_id = ?',
-      whereArgs: [conversationId],
-      orderBy: 'created_at ASC',
+  Future<void> toggleStar(String messageId) async {
+    final database = _requireDatabase();
+    final existing = await database.query(
+      'starred_messages',
+      columns: const ['message_id'],
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+      limit: 1,
     );
+
+    if (existing.isNotEmpty) {
+      await database.delete(
+        'starred_messages',
+        where: 'message_id = ?',
+        whereArgs: [messageId],
+      );
+      return;
+    }
+
+    await database.insert(
+      'starred_messages',
+      <String, Object?>{
+        'message_id': messageId,
+        'starred_at': DateTime.now().toIso8601String(),
+      },
+      conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<List<Message>> listMessages(String conversationId) async {
+    final rows = await _requireDatabase().rawQuery(
+      '''
+      SELECT
+        m.*,
+        CASE WHEN s.message_id IS NULL THEN 0 ELSE 1 END AS is_starred
+      FROM messages m
+      LEFT JOIN starred_messages s ON s.message_id = m.id
+      WHERE m.conversation_id = ?
+      ORDER BY m.created_at ASC
+      ''',
+      [conversationId],
+    );
+
+    return rows.map(Message.fromMap).toList(growable: false);
+  }
+
+  Future<List<Message>> listStarredMessages() async {
+    final rows = await _requireDatabase().rawQuery('''
+      SELECT
+        m.*,
+        1 AS is_starred
+      FROM messages m
+      INNER JOIN starred_messages s ON s.message_id = m.id
+      ORDER BY s.starred_at DESC
+    ''');
 
     return rows.map(Message.fromMap).toList(growable: false);
   }
