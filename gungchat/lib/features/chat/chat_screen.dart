@@ -32,6 +32,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final Set<String> _markingReadMessageIds = <String>{};
   final Map<String, GlobalKey> _messageKeys = <String, GlobalKey>{};
   Message? _replyingToMessage;
+  Message? _editingMessage;
   Timer? _highlightClearTimer;
   String? _highlightedMessageId;
   bool _burnAfterRead = true;
@@ -56,7 +57,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   void _startReply(Message message) {
     setState(() {
+      _editingMessage = null;
       _replyingToMessage = message;
+    });
+  }
+
+  void _startEdit(Message message) {
+    if (message.isDeleted) {
+      return;
+    }
+
+    setState(() {
+      _replyingToMessage = null;
+      _editingMessage = message;
+      _composerController.text = message.body;
+      _composerController.selection = TextSelection.fromPosition(
+        TextPosition(offset: _composerController.text.length),
+      );
     });
   }
 
@@ -127,6 +144,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     setState(() {
       _replyingToMessage = null;
+    });
+  }
+
+  void _clearEditTarget({bool clearComposer = false}) {
+    if (_editingMessage == null) {
+      return;
+    }
+
+    setState(() {
+      _editingMessage = null;
+      if (clearComposer) {
+        _composerController.clear();
+      }
     });
   }
 
@@ -316,6 +346,97 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
           _sending = false;
         });
       }
+    }
+  }
+
+  Future<void> _submitComposer(
+    DeviceIdentity identity,
+    Contact? selectedContact, {
+    Message? replyingToMessage,
+    Message? editingMessage,
+  }) async {
+    if (editingMessage != null) {
+      final body = _composerController.text.trim();
+      if (body.isEmpty || _sending) {
+        return;
+      }
+
+      setState(() {
+        _sending = true;
+      });
+
+      try {
+        final edited = await ref
+            .read(peerSessionControllerProvider.notifier)
+            .editMessage(
+              message: editingMessage,
+              body: body,
+            );
+        if (edited) {
+          _composerController.clear();
+          _clearEditTarget();
+        }
+      } finally {
+        if (mounted) {
+          setState(() {
+            _sending = false;
+          });
+        }
+      }
+      return;
+    }
+
+    await _sendMessage(
+      identity,
+      selectedContact,
+      replyingToMessage: replyingToMessage,
+    );
+  }
+
+  Future<void> _deleteMessage(
+    Message message,
+    MessageDeleteMode mode,
+  ) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: Text(
+            mode == MessageDeleteMode.hardDelete
+                ? 'Erase message permanently?'
+                : 'Delete message for everyone?',
+          ),
+          content: Text(
+            mode == MessageDeleteMode.hardDelete
+                ? 'This removes the message record instead of showing a deleted placeholder.'
+                : 'This replaces the message with a deleted placeholder in the conversation.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              child: Text(
+                mode == MessageDeleteMode.hardDelete ? 'Erase' : 'Delete',
+              ),
+            ),
+          ],
+        );
+      },
+    );
+
+    if (confirmed != true) {
+      return;
+    }
+
+    final deleted = await ref.read(peerSessionControllerProvider.notifier).deleteMessage(
+          message: message,
+          mode: mode,
+        );
+    if (deleted && _editingMessage?.id == message.id) {
+      _clearEditTarget(clearComposer: true);
     }
   }
 
@@ -618,6 +739,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         activeConversationId
       ? _replyingToMessage
       : null;
+    final editingMessage = _editingMessage?.conversationId == activeConversationId
+      ? _editingMessage
+      : null;
 
     final messagesAsync = ref.watch(
       conversationMessagesProvider(activeConversationId),
@@ -682,6 +806,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     null;
                 _highlightClearTimer?.cancel();
                 setState(() {
+                  _editingMessage = null;
                   _replyingToMessage = null;
                   _highlightedMessageId = null;
                 });
@@ -721,6 +846,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   _signalController.clear();
                   _highlightClearTimer?.cancel();
                   setState(() {
+                    _editingMessage = null;
                     _replyingToMessage = null;
                     _highlightedMessageId = null;
                   });
@@ -798,6 +924,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   peerSession.isTransportReady &&
                                       localUserId != null &&
                                       message.type != MessageType.system,
+                                canManageMessages:
+                                  peerSession.isTransportReady &&
+                                    message.isOutgoing &&
+                                    message.type != MessageType.system,
                             ),
                         ],
                       );
@@ -879,6 +1009,48 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                       ),
                     ],
+                    if (editingMessage != null) ...[
+                      const SizedBox(height: 12),
+                      DecoratedBox(
+                        decoration: BoxDecoration(
+                          borderRadius: BorderRadius.circular(12),
+                          color: theme.colorScheme.secondaryContainer,
+                        ),
+                        child: Padding(
+                          padding: const EdgeInsets.fromLTRB(12, 10, 8, 10),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      'Editing your message',
+                                      style: theme.textTheme.labelLarge,
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      _replyPreviewText(editingMessage.body),
+                                      maxLines: 2,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: theme.textTheme.bodySmall,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              IconButton(
+                                tooltip: 'Cancel edit',
+                                onPressed: () => _clearEditTarget(
+                                  clearComposer: true,
+                                ),
+                                icon: const Icon(Icons.close),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: 12),
                     TextField(
                       controller: _composerController,
@@ -897,18 +1069,23 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               _sending ||
                               !composerEnabled
                           ? null
-                          : (_) => _sendMessage(
+                          : (_) => _submitComposer(
                                 identityAsync.requireValue,
                                 selectedContact,
-                              replyingToMessage: replyingToMessage,
+                            replyingToMessage: replyingToMessage,
+                            editingMessage: editingMessage,
                               ),
                       decoration: InputDecoration(
-                        labelText: canSendSecure
+                        labelText: editingMessage != null
+                          ? 'Edit secure message'
+                          : canSendSecure
                             ? 'Secure peer message'
                             : canSaveLocal
                                 ? 'Bootstrap message'
                                 : 'Peer message',
-                        hintText: canSendSecure
+                        hintText: editingMessage != null
+                          ? 'Update your encrypted message for the active peer session...'
+                          : canSendSecure
                             ? 'Type an encrypted message for the active peer session...'
                             : canSaveLocal
                                 ? 'Type a local encrypted message draft...'
@@ -928,14 +1105,18 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     SwitchListTile.adaptive(
                       contentPadding: EdgeInsets.zero,
                       value: _burnAfterRead,
-                      onChanged: (value) {
+                      onChanged: editingMessage != null
+                          ? null
+                          : (value) {
                         setState(() {
                           _burnAfterRead = value;
                         });
                       },
                       title: const Text('Burn after read by default'),
                       subtitle: Text(
-                        canSendSecure
+                        editingMessage != null
+                            ? 'Retention settings apply only to new messages, not edits.'
+                            : canSendSecure
                             ? 'Expiry metadata is sent with each encrypted peer message.'
                             : 'Initial TTL is handled locally until peer session sync is added.',
                       ),
@@ -948,10 +1129,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 _sending ||
                                 !composerEnabled
                             ? null
-                            : () => _sendMessage(
+                            : () => _submitComposer(
                                   identityAsync.requireValue,
                                   selectedContact,
                                   replyingToMessage: replyingToMessage,
+                                  editingMessage: editingMessage,
                                 ),
                         icon: _sending
                             ? const SizedBox(
@@ -960,9 +1142,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 child:
                                     CircularProgressIndicator(strokeWidth: 2),
                               )
-                            : const Icon(Icons.send),
+                            : Icon(
+                                editingMessage != null ? Icons.check : Icons.send,
+                              ),
                         label: Text(
-                          canSendSecure
+                          editingMessage != null
+                              ? 'Save Message Edit'
+                              : canSendSecure
                               ? 'Send Secure Message'
                               : canSaveLocal
                                   ? 'Save Local Message'
@@ -985,18 +1171,25 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     List<Message> messages, {
     required String? localUserId,
     required bool canToggleReactions,
+    required bool canManageMessages,
   }) {
     return MessageBubble(
       key: _messageKeyFor(message.id),
       message: message,
       isHighlighted: _highlightedMessageId == message.id,
       currentUserId: localUserId,
-      onReply: message.type == MessageType.system
+      onReply: message.type == MessageType.system || message.isDeleted
           ? null
           : () => _startReply(message),
-        onToggleStar: message.type == MessageType.system
+      onToggleStar: message.type == MessageType.system || message.isDeleted
           ? null
           : () => _toggleStar(message),
+      onEdit: canManageMessages && !message.isDeleted
+          ? () => _startEdit(message)
+          : null,
+      onDelete: canManageMessages
+          ? (mode) => unawaited(_deleteMessage(message, mode))
+          : null,
       onToggleReaction: canToggleReactions
           ? (emoji) => _toggleReaction(message, emoji)
           : null,

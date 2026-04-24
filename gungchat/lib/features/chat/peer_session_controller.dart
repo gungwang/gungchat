@@ -484,6 +484,105 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     }
   }
 
+  Future<bool> editMessage({
+    required Message message,
+    required String body,
+  }) async {
+    final conversationId = state.conversationId;
+    if (conversationId == null || !state.isTransportReady) {
+      _setError('Open the secure channel before editing messages.');
+      return false;
+    }
+    if (!message.isOutgoing || message.isDeleted) {
+      _setError('Only active outgoing messages can be edited.');
+      return false;
+    }
+
+    final trimmedBody = body.trim();
+    if (trimmedBody.isEmpty) {
+      _setError('Edited message content cannot be empty.');
+      return false;
+    }
+    if (trimmedBody == message.body.trim()) {
+      return true;
+    }
+
+    final identity = await _ensureLocalIdentity();
+    final messageService = await _loadMessageService();
+    final editedAt = DateTime.now();
+
+    try {
+      await _webRtcManager.sendText(
+        PeerTransportEnvelope.messageEdit(
+          messageId: message.id,
+          senderFingerprint: identity.fingerprint,
+          createdAt: editedAt,
+          content: trimmedBody,
+        ).encodeTransportString(),
+      );
+      await messageService.updateMessageContent(
+        messageId: message.id,
+        body: trimmedBody,
+        editedAt: editedAt,
+      );
+      _refreshConversation(message.conversationId);
+      state = state.copyWith(lastEvent: 'Secure message edited.');
+      return true;
+    } catch (error) {
+      _setError('Message edit failed: $error');
+      return false;
+    }
+  }
+
+  Future<bool> deleteMessage({
+    required Message message,
+    required MessageDeleteMode mode,
+  }) async {
+    final conversationId = state.conversationId;
+    if (conversationId == null || !state.isTransportReady) {
+      _setError('Open the secure channel before deleting messages.');
+      return false;
+    }
+    if (!message.isOutgoing) {
+      _setError('Only outgoing messages can be deleted.');
+      return false;
+    }
+
+    final identity = await _ensureLocalIdentity();
+    final messageService = await _loadMessageService();
+    final deletedAt = DateTime.now();
+
+    try {
+      await _webRtcManager.sendText(
+        PeerTransportEnvelope.messageDelete(
+          messageId: message.id,
+          senderFingerprint: identity.fingerprint,
+          createdAt: deletedAt,
+          deleteMode: mode,
+        ).encodeTransportString(),
+      );
+      if (mode == MessageDeleteMode.hardDelete) {
+        await messageService.deleteMessage(message.id);
+      } else {
+        await messageService.markMessageDeleted(
+          messageId: message.id,
+          deletedAt: deletedAt,
+          mode: mode,
+        );
+      }
+      _refreshConversation(message.conversationId);
+      state = state.copyWith(
+        lastEvent: mode == MessageDeleteMode.hardDelete
+            ? 'Secure message erased.'
+            : 'Secure message deleted.',
+      );
+      return true;
+    } catch (error) {
+      _setError('Message delete failed: $error');
+      return false;
+    }
+  }
+
   void updateComposerActivity(String draft) {
     final shouldNotifyTyping =
         state.isTransportReady && draft.trim().isNotEmpty;
@@ -808,6 +907,14 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         await _handleReactionEnvelope(envelope);
         return;
       }
+      if (envelope.kind == PeerTransportEnvelopeKind.messageEdit) {
+        await _handleMessageEditEnvelope(envelope);
+        return;
+      }
+      if (envelope.kind == PeerTransportEnvelopeKind.messageDelete) {
+        await _handleMessageDeleteEnvelope(envelope);
+        return;
+      }
 
       final payload = envelope.payload;
       final messageId = envelope.messageId;
@@ -1061,6 +1168,66 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     );
   }
 
+  Future<void> _handleMessageEditEnvelope(PeerTransportEnvelope envelope) async {
+    final messageId = envelope.messageId;
+    final content = envelope.content;
+    if (messageId == null || content == null || content.trim().isEmpty) {
+      throw const FormatException(
+        'Incoming message edit is missing edit metadata.',
+      );
+    }
+
+    final conversationId = state.conversationId ??
+        conversationIdForFingerprint(envelope.senderFingerprint);
+    final messageService = await _loadMessageService();
+    await messageService.updateMessageContent(
+      messageId: messageId,
+      body: content,
+      editedAt: envelope.createdAt,
+    );
+    _refreshConversation(conversationId);
+
+    state = state.copyWith(
+      remoteFingerprint: envelope.senderFingerprint,
+      conversationId: conversationId,
+      lastEvent: 'Peer edited a message.',
+    );
+  }
+
+  Future<void> _handleMessageDeleteEnvelope(
+    PeerTransportEnvelope envelope,
+  ) async {
+    final messageId = envelope.messageId;
+    final deleteMode = envelope.deleteMode;
+    if (messageId == null || deleteMode == null) {
+      throw const FormatException(
+        'Incoming message delete is missing delete metadata.',
+      );
+    }
+
+    final conversationId = state.conversationId ??
+        conversationIdForFingerprint(envelope.senderFingerprint);
+    final messageService = await _loadMessageService();
+    if (deleteMode == MessageDeleteMode.hardDelete) {
+      await messageService.deleteMessage(messageId);
+    } else {
+      await messageService.markMessageDeleted(
+        messageId: messageId,
+        deletedAt: envelope.createdAt,
+        mode: deleteMode,
+      );
+    }
+    _refreshConversation(conversationId);
+
+    state = state.copyWith(
+      remoteFingerprint: envelope.senderFingerprint,
+      conversationId: conversationId,
+      lastEvent: deleteMode == MessageDeleteMode.hardDelete
+          ? 'Peer erased a message.'
+          : 'Peer deleted a message.',
+    );
+  }
+
   Future<void> _sendTypingStatus(bool isTyping) async {
     if (!state.isTransportReady) {
       _localTypingActive = false;
@@ -1187,6 +1354,8 @@ enum PeerTransportEnvelopeKind {
   presence,
   receipt,
   reaction,
+  messageEdit,
+  messageDelete,
 }
 
 @immutable
@@ -1204,7 +1373,9 @@ class PeerTransportEnvelope {
         isTyping = null,
         presenceStatus = null,
         receiptState = null,
-        reactions = null;
+      reactions = null,
+      content = null,
+      deleteMode = null;
 
   const PeerTransportEnvelope.typing({
     required this.senderFingerprint,
@@ -1219,7 +1390,9 @@ class PeerTransportEnvelope {
         expiresAt = null,
         replyToMessageId = null,
         replyToBody = null,
-        reactions = null;
+        reactions = null,
+        content = null,
+        deleteMode = null;
 
   const PeerTransportEnvelope.presence({
     required this.senderFingerprint,
@@ -1234,7 +1407,9 @@ class PeerTransportEnvelope {
         expiresAt = null,
         replyToMessageId = null,
         replyToBody = null,
-        reactions = null;
+        reactions = null,
+        content = null,
+        deleteMode = null;
 
   const PeerTransportEnvelope.receipt({
     required this.messageId,
@@ -1249,7 +1424,9 @@ class PeerTransportEnvelope {
         expiresAt = null,
         replyToMessageId = null,
         replyToBody = null,
-        reactions = null;
+        reactions = null,
+        content = null,
+        deleteMode = null;
 
   const PeerTransportEnvelope.reaction({
     required this.messageId,
@@ -1264,7 +1441,43 @@ class PeerTransportEnvelope {
         burnAfterRead = null,
         expiresAt = null,
         replyToMessageId = null,
-        replyToBody = null;
+        replyToBody = null,
+        content = null,
+        deleteMode = null;
+
+  const PeerTransportEnvelope.messageEdit({
+    required this.messageId,
+    required this.senderFingerprint,
+    required this.createdAt,
+    required this.content,
+  })  : kind = PeerTransportEnvelopeKind.messageEdit,
+        isTyping = null,
+        presenceStatus = null,
+        receiptState = null,
+        reactions = null,
+        payload = null,
+        burnAfterRead = null,
+        expiresAt = null,
+        replyToMessageId = null,
+        replyToBody = null,
+        deleteMode = null;
+
+  const PeerTransportEnvelope.messageDelete({
+    required this.messageId,
+    required this.senderFingerprint,
+    required this.createdAt,
+    required this.deleteMode,
+  })  : kind = PeerTransportEnvelopeKind.messageDelete,
+        isTyping = null,
+        presenceStatus = null,
+        receiptState = null,
+        reactions = null,
+        payload = null,
+        burnAfterRead = null,
+        expiresAt = null,
+        replyToMessageId = null,
+        replyToBody = null,
+        content = null;
 
   final PeerTransportEnvelopeKind kind;
   final String? messageId;
@@ -1279,6 +1492,8 @@ class PeerTransportEnvelope {
   final PeerPresenceStatus? presenceStatus;
   final MessageDeliveryState? receiptState;
   final Map<String, List<String>>? reactions;
+  final String? content;
+  final MessageDeleteMode? deleteMode;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -1299,6 +1514,12 @@ class PeerTransportEnvelope {
       } else if (kind == PeerTransportEnvelopeKind.reaction) ...<String, dynamic>{
         'messageId': messageId,
         'reactions': reactions,
+      } else if (kind == PeerTransportEnvelopeKind.messageEdit) ...<String, dynamic>{
+        'messageId': messageId,
+        'content': content,
+      } else if (kind == PeerTransportEnvelopeKind.messageDelete) ...<String, dynamic>{
+        'messageId': messageId,
+        'deleteMode': deleteMode!.name,
       } else ...<String, dynamic>{
         'messageId': messageId,
         'receiptState': receiptState!.name,
@@ -1314,6 +1535,8 @@ class PeerTransportEnvelope {
       'presence' => PeerTransportEnvelopeKind.presence,
       'receipt' => PeerTransportEnvelopeKind.receipt,
       'reaction' => PeerTransportEnvelopeKind.reaction,
+      'messageEdit' => PeerTransportEnvelopeKind.messageEdit,
+      'messageDelete' => PeerTransportEnvelopeKind.messageDelete,
       _ => PeerTransportEnvelopeKind.message,
     };
 
@@ -1360,6 +1583,26 @@ class PeerTransportEnvelope {
             emoji,
             List<String>.from(users as List<dynamic>),
           ),
+        ),
+      );
+    }
+
+    if (kind == PeerTransportEnvelopeKind.messageEdit) {
+      return PeerTransportEnvelope.messageEdit(
+        messageId: json['messageId'] as String,
+        senderFingerprint: json['senderFingerprint'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        content: json['content'] as String,
+      );
+    }
+
+    if (kind == PeerTransportEnvelopeKind.messageDelete) {
+      return PeerTransportEnvelope.messageDelete(
+        messageId: json['messageId'] as String,
+        senderFingerprint: json['senderFingerprint'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        deleteMode: MessageDeleteMode.values.byName(
+          json['deleteMode'] as String,
         ),
       );
     }

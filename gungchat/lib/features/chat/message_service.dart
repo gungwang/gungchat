@@ -77,6 +77,34 @@ class MessageService {
     return _messageDatabase.updateReactions(messageId, reactions);
   }
 
+  Future<void> updateMessageContent({
+    required String messageId,
+    required String body,
+    required DateTime editedAt,
+  }) {
+    return _messageDatabase.updateMessageContent(
+      messageId: messageId,
+      body: body,
+      editedAt: editedAt,
+    );
+  }
+
+  Future<void> markMessageDeleted({
+    required String messageId,
+    required DateTime deletedAt,
+    required MessageDeleteMode mode,
+  }) {
+    return _messageDatabase.markMessageDeleted(
+      messageId: messageId,
+      deletedAt: deletedAt,
+      mode: mode,
+    );
+  }
+
+  Future<void> deleteMessage(String messageId) {
+    return _messageDatabase.deleteMessage(messageId);
+  }
+
   Future<void> toggleStar(String messageId) {
     return _messageDatabase.toggleStar(messageId);
   }

@@ -13,6 +13,8 @@ class MessageBubble extends StatelessWidget {
     this.currentUserId,
     this.onToggleReaction,
     this.onToggleStar,
+    this.onEdit,
+    this.onDelete,
   });
 
   final Message message;
@@ -22,6 +24,8 @@ class MessageBubble extends StatelessWidget {
   final String? currentUserId;
   final ValueChanged<String>? onToggleReaction;
   final VoidCallback? onToggleStar;
+  final VoidCallback? onEdit;
+  final ValueChanged<MessageDeleteMode>? onDelete;
 
   @override
   Widget build(BuildContext context) {
@@ -34,6 +38,11 @@ class MessageBubble extends StatelessWidget {
     final replyPreview = _replyPreviewText();
     final reactionEntries = message.reactions.entries.toList(growable: false)
       ..sort((left, right) => left.key.compareTo(right.key));
+    final availableActions = <_MessageBubbleAction>[
+      if (onEdit != null && !message.isDeleted) _MessageBubbleAction.edit,
+      if (onDelete != null && !message.isDeleted) _MessageBubbleAction.delete,
+      if (onDelete != null) _MessageBubbleAction.erase,
+    ];
     final bubble = AnimatedContainer(
       duration: const Duration(milliseconds: 220),
       margin: const EdgeInsets.symmetric(vertical: 6),
@@ -89,7 +98,7 @@ class MessageBubble extends StatelessWidget {
             ),
             const SizedBox(height: 8),
           ],
-          Text(message.body),
+          _buildBody(theme),
           const SizedBox(height: 8),
           Row(
             crossAxisAlignment: CrossAxisAlignment.center,
@@ -115,9 +124,53 @@ class MessageBubble extends StatelessWidget {
                     height: 28,
                   ),
                 ),
+              if (availableActions.isNotEmpty)
+                PopupMenuButton<_MessageBubbleAction>(
+                  key: const ValueKey('message-actions-button'),
+                  tooltip: 'Message actions',
+                  onSelected: (action) {
+                    switch (action) {
+                      case _MessageBubbleAction.edit:
+                        onEdit?.call();
+                      case _MessageBubbleAction.delete:
+                        onDelete?.call(MessageDeleteMode.tombstone);
+                      case _MessageBubbleAction.erase:
+                        onDelete?.call(MessageDeleteMode.hardDelete);
+                    }
+                  },
+                  itemBuilder: (context) {
+                    return [
+                      if (availableActions.contains(_MessageBubbleAction.edit))
+                        const PopupMenuItem<_MessageBubbleAction>(
+                          key: ValueKey('message-action-edit'),
+                          value: _MessageBubbleAction.edit,
+                          child: Text('Edit message'),
+                        ),
+                      if (availableActions.contains(_MessageBubbleAction.delete))
+                        const PopupMenuItem<_MessageBubbleAction>(
+                          key: ValueKey('message-action-delete'),
+                          value: _MessageBubbleAction.delete,
+                          child: Text('Delete for everyone'),
+                        ),
+                      if (availableActions.contains(_MessageBubbleAction.erase))
+                        const PopupMenuItem<_MessageBubbleAction>(
+                          key: ValueKey('message-action-erase'),
+                          value: _MessageBubbleAction.erase,
+                          child: Text('Erase permanently'),
+                        ),
+                    ];
+                  },
+                  padding: EdgeInsets.zero,
+                  constraints: const BoxConstraints.tightFor(
+                    width: 28,
+                    height: 28,
+                  ),
+                  iconSize: 18,
+                ),
             ],
           ),
-          if (reactionEntries.isNotEmpty || onToggleReaction != null) ...[
+          if (!message.isDeleted &&
+              (reactionEntries.isNotEmpty || onToggleReaction != null)) ...[
             const SizedBox(height: 8),
             Wrap(
               spacing: 6,
@@ -176,6 +229,20 @@ class MessageBubble extends StatelessWidget {
     );
   }
 
+  Widget _buildBody(ThemeData theme) {
+    if (!message.isDeleted) {
+      return Text(message.body);
+    }
+
+    return Text(
+      'Message deleted',
+      style: theme.textTheme.bodyMedium?.copyWith(
+        fontStyle: FontStyle.italic,
+        color: theme.colorScheme.onSurfaceVariant,
+      ),
+    );
+  }
+
   String? _replyPreviewText() {
     final rawValue = message.replyToBody?.replaceAll(RegExp(r'\s+'), ' ').trim();
     if (rawValue == null || rawValue.isEmpty) {
@@ -190,7 +257,13 @@ class MessageBubble extends StatelessWidget {
   String _metadataLabel() {
     final created = _formatTime(message.createdAt);
     final burnLabel = message.burnAfterRead ? 'Burn-after-read' : 'Persistent';
-    return '$created • ${message.deliveryState.name} • $burnLabel';
+    final status = message.isDeleted
+        ? 'deleted'
+        : message.isEdited
+            ? 'edited'
+            : null;
+    return [created, message.deliveryState.name, burnLabel, if (status != null) status]
+        .join(' • ');
   }
 
   String _formatTime(DateTime value) {
@@ -198,4 +271,10 @@ class MessageBubble extends StatelessWidget {
     final minute = value.minute.toString().padLeft(2, '0');
     return '$hour:$minute';
   }
+}
+
+enum _MessageBubbleAction {
+  edit,
+  delete,
+  erase,
 }

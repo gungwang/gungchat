@@ -17,7 +17,7 @@ class MessageDatabase {
 
     _database = await openDatabase(
       databasePath,
-      version: 4,
+      version: 5,
       onCreate: (database, version) async {
         await database.execute('''
           CREATE TABLE messages(
@@ -33,7 +33,10 @@ class MessageDatabase {
             expires_at TEXT,
             reply_to_message_id TEXT,
             reply_to_body TEXT,
-            reactions_json TEXT
+            reactions_json TEXT,
+            edited_at TEXT,
+            deleted_at TEXT,
+            delete_mode TEXT
           )
         ''');
         await database.execute('''
@@ -64,6 +67,17 @@ class MessageDatabase {
               starred_at TEXT NOT NULL
             )
           ''');
+        }
+        if (oldVersion < 5) {
+          await database.execute(
+            'ALTER TABLE messages ADD COLUMN edited_at TEXT',
+          );
+          await database.execute(
+            'ALTER TABLE messages ADD COLUMN deleted_at TEXT',
+          );
+          await database.execute(
+            'ALTER TABLE messages ADD COLUMN delete_mode TEXT',
+          );
         }
       },
     );
@@ -131,6 +145,64 @@ class MessageDatabase {
         'starred_at': DateTime.now().toIso8601String(),
       },
       conflictAlgorithm: ConflictAlgorithm.replace,
+    );
+  }
+
+  Future<void> updateMessageContent({
+    required String messageId,
+    required String body,
+    required DateTime editedAt,
+  }) async {
+    await _requireDatabase().update(
+      'messages',
+      <String, Object?>{
+        'body': body,
+        'edited_at': editedAt.toIso8601String(),
+        'deleted_at': null,
+        'delete_mode': null,
+      },
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  Future<void> markMessageDeleted({
+    required String messageId,
+    required DateTime deletedAt,
+    required MessageDeleteMode mode,
+  }) async {
+    if (mode == MessageDeleteMode.hardDelete) {
+      await deleteMessage(messageId);
+      return;
+    }
+
+    await _requireDatabase().update(
+      'messages',
+      <String, Object?>{
+        'body': '',
+        'reply_to_message_id': null,
+        'reply_to_body': null,
+        'reactions_json': null,
+        'edited_at': null,
+        'deleted_at': deletedAt.toIso8601String(),
+        'delete_mode': mode.name,
+      },
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
+  Future<void> deleteMessage(String messageId) async {
+    final database = _requireDatabase();
+    await database.delete(
+      'starred_messages',
+      where: 'message_id = ?',
+      whereArgs: [messageId],
+    );
+    await database.delete(
+      'messages',
+      where: 'id = ?',
+      whereArgs: [messageId],
     );
   }
 
