@@ -8,6 +8,7 @@ import '../../app/providers.dart';
 import '../../core/encryption/key_manager.dart';
 import '../../core/networking/network_monitor.dart';
 import '../../core/networking/webrtc_manager.dart';
+import '../../core/text/spoiler_renderer.dart';
 import '../../models/contact.dart';
 import '../../models/message.dart';
 import '../contacts/discovery_service.dart';
@@ -163,7 +164,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   }
 
   String _replyPreviewText(String body) {
-    final compact = body.replaceAll(RegExp(r'\s+'), ' ').trim();
+    final compact = SpoilerRenderer.previewText(body);
     if (compact.length <= 96) {
       return compact;
     }

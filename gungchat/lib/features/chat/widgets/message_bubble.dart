@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../app/providers.dart';
+import '../../../core/text/spoiler_renderer.dart';
 import '../reaction_service.dart';
 import '../link_preview_service.dart';
 import '../../../models/message.dart';
@@ -256,14 +257,20 @@ class MessageBubble extends ConsumerWidget {
     }
 
     if (message.type == MessageType.text) {
-      final previewUrl = LinkPreviewService.extractFirstUrl(message.body);
+      final hasSpoilers = SpoilerRenderer.hasSpoilers(message.body);
+      final previewUrl = LinkPreviewService.extractFirstUrl(
+        hasSpoilers ? SpoilerRenderer.visibleText(message.body) : message.body,
+      );
+      final body = hasSpoilers
+          ? _SpoilerTextBody(text: message.body)
+          : Text(message.body);
       if (previewUrl != null) {
         final previewAsync = ref.watch(linkPreviewProvider(previewUrl));
         return Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisSize: MainAxisSize.min,
           children: [
-            Text(message.body),
+            body,
             const SizedBox(height: 8),
             previewAsync.when(
               data: (preview) {
@@ -278,14 +285,21 @@ class MessageBubble extends ConsumerWidget {
           ],
         );
       }
+
+      return body;
     }
 
     return Text(message.body);
   }
 
   String? _replyPreviewText() {
-    final rawValue = message.replyToBody?.replaceAll(RegExp(r'\s+'), ' ').trim();
-    if (rawValue == null || rawValue.isEmpty) {
+    final replyBody = message.replyToBody;
+    if (replyBody == null) {
+      return null;
+    }
+
+    final rawValue = SpoilerRenderer.previewText(replyBody);
+    if (rawValue.isEmpty) {
       return null;
     }
     if (rawValue.length <= 96) {
@@ -321,6 +335,112 @@ class MessageBubble extends ConsumerWidget {
     final minutes = totalSeconds ~/ 60;
     final seconds = totalSeconds % 60;
     return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+}
+
+class _SpoilerTextBody extends StatefulWidget {
+  const _SpoilerTextBody({required this.text});
+
+  final String text;
+
+  @override
+  State<_SpoilerTextBody> createState() => _SpoilerTextBodyState();
+}
+
+class _SpoilerTextBodyState extends State<_SpoilerTextBody> {
+  List<SpoilerSegment> _segments = const <SpoilerSegment>[];
+  final Set<int> _revealedIndices = <int>{};
+
+  @override
+  void initState() {
+    super.initState();
+    _segments = SpoilerRenderer.parse(widget.text);
+  }
+
+  @override
+  void didUpdateWidget(covariant _SpoilerTextBody oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.text != widget.text) {
+      _segments = SpoilerRenderer.parse(widget.text);
+      _revealedIndices.clear();
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final baseStyle = theme.textTheme.bodyMedium;
+
+    return Text.rich(
+      TextSpan(
+        children: [
+          for (var index = 0; index < _segments.length; index++)
+            if (!_segments[index].isSpoiler || _revealedIndices.contains(index))
+              TextSpan(
+                text: _segments[index].text,
+                style: _segments[index].isSpoiler
+                    ? baseStyle?.copyWith(
+                        backgroundColor:
+                            theme.colorScheme.surfaceContainerHighest,
+                      )
+                    : baseStyle,
+              )
+            else
+              WidgetSpan(
+                alignment: PlaceholderAlignment.middle,
+                child: _HiddenSpoilerChip(
+                  key: ValueKey('spoiler-segment-$index'),
+                  onTap: () {
+                    setState(() {
+                      _revealedIndices.add(index);
+                    });
+                  },
+                ),
+              ),
+        ],
+      ),
+      style: baseStyle,
+    );
+  }
+}
+
+class _HiddenSpoilerChip extends StatelessWidget {
+  const _HiddenSpoilerChip({
+    super.key,
+    required this.onTap,
+  });
+
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+
+    return Semantics(
+      button: true,
+      label: 'Spoiler, tap to reveal',
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: onTap,
+        child: ExcludeSemantics(
+          child: DecoratedBox(
+            decoration: BoxDecoration(
+              color: theme.colorScheme.inverseSurface,
+              borderRadius: BorderRadius.circular(6),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              child: Text(
+                'Spoiler',
+                style: theme.textTheme.bodyMedium?.copyWith(
+                  color: theme.colorScheme.onInverseSurface,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
   }
 }
 
