@@ -30,12 +30,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _composerController = TextEditingController();
   final TextEditingController _signalController = TextEditingController();
   final Set<String> _markingReadMessageIds = <String>{};
+  final Map<String, GlobalKey> _messageKeys = <String, GlobalKey>{};
   Message? _replyingToMessage;
+  Timer? _highlightClearTimer;
+  String? _highlightedMessageId;
   bool _burnAfterRead = true;
   bool _sending = false;
 
   @override
   void dispose() {
+    _highlightClearTimer?.cancel();
     _composerController.dispose();
     _signalController.dispose();
     super.dispose();
@@ -56,6 +60,66 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     });
   }
 
+  GlobalKey _messageKeyFor(String messageId) {
+    return _messageKeys.putIfAbsent(messageId, GlobalKey.new);
+  }
+
+  void _highlightMessage(String messageId) {
+    _highlightClearTimer?.cancel();
+    setState(() {
+      _highlightedMessageId = messageId;
+    });
+    _highlightClearTimer = Timer(const Duration(seconds: 2), () {
+      if (!mounted || _highlightedMessageId != messageId) {
+        return;
+      }
+      setState(() {
+        _highlightedMessageId = null;
+      });
+    });
+  }
+
+  Future<void> _jumpToQuotedMessage({
+    required Message message,
+    required List<Message> messages,
+  }) async {
+    final targetMessageId = message.replyToMessageId;
+    if (targetMessageId == null) {
+      return;
+    }
+
+    final existsInConversation = messages.any(
+      (candidate) => candidate.id == targetMessageId,
+    );
+    if (!existsInConversation) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('The original message is no longer available.'),
+          ),
+        );
+      }
+      return;
+    }
+
+    final targetContext = _messageKeyFor(targetMessageId).currentContext;
+    if (targetContext == null) {
+      return;
+    }
+
+    await Scrollable.ensureVisible(
+      targetContext,
+      duration: const Duration(milliseconds: 260),
+      curve: Curves.easeInOut,
+      alignment: 0.2,
+    );
+
+    if (!mounted) {
+      return;
+    }
+    _highlightMessage(targetMessageId);
+  }
+
   void _clearReplyTarget() {
     if (_replyingToMessage == null) {
       return;
@@ -72,6 +136,15 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       return compact;
     }
     return '${compact.substring(0, 96)}...';
+  }
+
+  void _toggleReaction(Message message, String emoji) {
+    unawaited(
+      ref.read(peerSessionControllerProvider.notifier).toggleReaction(
+            message: message,
+            emoji: emoji,
+          ),
+    );
   }
 
   Future<void> _copyInvitationDraft(
@@ -520,6 +593,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     final theme = Theme.of(context);
     final identityAsync = ref.watch(deviceIdentityProvider);
+    final localUserId = identityAsync.asData?.value.fingerprint;
     final networkAsync = ref.watch(networkStatusProvider);
     final peerSession = ref.watch(peerSessionControllerProvider);
     final savedContacts = ref.watch(contactBookProvider);
@@ -598,7 +672,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     null;
                 ref.read(pendingPeerConnectIntentProvider.notifier).state =
                     null;
-                _clearReplyTarget();
+                _highlightClearTimer?.cancel();
+                setState(() {
+                  _replyingToMessage = null;
+                  _highlightedMessageId = null;
+                });
               },
               onCopyUri: selectedUri == null
                   ? null
@@ -633,8 +711,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     .resetSession();
                 if (mounted) {
                   _signalController.clear();
+                  _highlightClearTimer?.cancel();
                   setState(() {
                     _replyingToMessage = null;
+                    _highlightedMessageId = null;
                   });
                 }
               },
@@ -699,12 +779,19 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         );
                       }
 
-                      return ListView.builder(
-                        itemCount: messages.length,
-                        itemBuilder: (context, index) {
-                          final message = messages[index];
-                          return _buildMessage(message);
-                        },
+                      return ListView(
+                        children: [
+                          for (final message in messages)
+                            _buildMessage(
+                              message,
+                              messages,
+                              localUserId: localUserId,
+                              canToggleReactions:
+                                  peerSession.isTransportReady &&
+                                      localUserId != null &&
+                                      message.type != MessageType.system,
+                            ),
+                        ],
                       );
                     },
                     loading: () =>
@@ -885,12 +972,29 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
-  Widget _buildMessage(Message message) {
+  Widget _buildMessage(
+    Message message,
+    List<Message> messages, {
+    required String? localUserId,
+    required bool canToggleReactions,
+  }) {
     return MessageBubble(
+      key: _messageKeyFor(message.id),
       message: message,
+      isHighlighted: _highlightedMessageId == message.id,
+      currentUserId: localUserId,
       onReply: message.type == MessageType.system
           ? null
           : () => _startReply(message),
+      onToggleReaction: canToggleReactions
+          ? (emoji) => _toggleReaction(message, emoji)
+          : null,
+      onQuotedMessageTap: message.replyToMessageId == null
+          ? null
+          : () => _jumpToQuotedMessage(
+                message: message,
+                messages: messages,
+              ),
     );
   }
 }

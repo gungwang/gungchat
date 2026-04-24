@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/foundation.dart';
 
 enum MessageType {
@@ -30,6 +32,7 @@ class Message {
     this.expiresAt,
     this.replyToMessageId,
     this.replyToBody,
+    this.reactions = const {},
   });
 
   final String id;
@@ -44,9 +47,11 @@ class Message {
   final DateTime? expiresAt;
   final String? replyToMessageId;
   final String? replyToBody;
+  final Map<String, List<String>> reactions;
 
   bool get isExpired => expiresAt != null && expiresAt!.isBefore(DateTime.now());
   bool get hasReply => replyToBody != null && replyToBody!.trim().isNotEmpty;
+  bool get hasReactions => reactions.isNotEmpty;
 
   Message copyWith({
     String? id,
@@ -63,6 +68,7 @@ class Message {
     String? replyToMessageId,
     String? replyToBody,
     bool clearReplyTo = false,
+    Map<String, List<String>>? reactions,
   }) {
     return Message(
       id: id ?? this.id,
@@ -78,6 +84,38 @@ class Message {
       replyToMessageId:
           clearReplyTo ? null : replyToMessageId ?? this.replyToMessageId,
       replyToBody: clearReplyTo ? null : replyToBody ?? this.replyToBody,
+      reactions: reactions ?? this.reactions,
+    );
+  }
+
+  static String? encodeReactions(Map<String, List<String>> reactions) {
+    if (reactions.isEmpty) {
+      return null;
+    }
+
+    return jsonEncode(
+      reactions.map(
+        (emoji, users) => MapEntry(emoji, List<String>.from(users)),
+      ),
+    );
+  }
+
+  static Map<String, List<String>> decodeReactions(Object? rawValue) {
+    if (rawValue == null) {
+      return const {};
+    }
+
+    final encoded = rawValue as String;
+    if (encoded.isEmpty) {
+      return const {};
+    }
+
+    final decoded = jsonDecode(encoded) as Map<String, dynamic>;
+    return decoded.map(
+      (emoji, users) => MapEntry(
+        emoji,
+        List<String>.from(users as List<dynamic>),
+      ),
     );
   }
 
@@ -95,6 +133,7 @@ class Message {
       'expires_at': expiresAt?.toIso8601String(),
       'reply_to_message_id': replyToMessageId,
       'reply_to_body': replyToBody,
+      'reactions_json': encodeReactions(reactions),
     };
   }
 
@@ -116,6 +155,7 @@ class Message {
           : DateTime.parse(map['expires_at']! as String),
       replyToMessageId: map['reply_to_message_id'] as String?,
       replyToBody: map['reply_to_body'] as String?,
+      reactions: decodeReactions(map['reactions_json']),
     );
   }
 }

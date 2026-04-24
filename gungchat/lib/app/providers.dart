@@ -16,6 +16,7 @@ import '../features/chat/peer_connect_intent.dart';
 import '../features/chat/peer_deep_link_service.dart';
 import '../features/chat/peer_invitation_builder.dart';
 import '../features/chat/peer_invitation_parser.dart';
+import '../features/chat/reaction_service.dart';
 import '../features/chat/message_service.dart';
 import '../features/chat/presence_status.dart';
 import '../features/chat/peer_session_controller.dart';
@@ -128,6 +129,10 @@ final ephemeralManagerProvider = Provider<EphemeralManager>((ref) {
   return const EphemeralManager();
 });
 
+final reactionServiceProvider = Provider<ReactionService>((ref) {
+  return const ReactionService();
+});
+
 final messageServiceProvider = FutureProvider<MessageService>((ref) async {
   final database = await ref.watch(messageDatabaseProvider.future);
   return MessageService(
@@ -145,6 +150,7 @@ final peerSessionControllerProvider =
     refreshConversation: (conversationId) {
       ref.invalidate(conversationMessagesProvider(conversationId));
     },
+    reactionService: ref.watch(reactionServiceProvider),
     webRtcManager: ref.watch(webRtcManagerProvider),
     signalingService: ref.watch(manualSignalingServiceProvider),
     cryptoService: ref.watch(cryptoServiceProvider),

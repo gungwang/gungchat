@@ -15,6 +15,7 @@ import '../../models/contact.dart';
 import '../../models/message.dart';
 import 'message_service.dart';
 import 'presence_status.dart';
+import 'reaction_service.dart';
 
 typedef LoadLocalIdentity = Future<DeviceIdentity> Function();
 typedef LoadMessageService = Future<MessageService> Function();
@@ -202,6 +203,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     required LoadLocalIdentity loadIdentity,
     required LoadMessageService loadMessageService,
     required RefreshConversationMessages refreshConversation,
+    required ReactionService reactionService,
     required WebRtcManager webRtcManager,
     required ManualSignalingService signalingService,
     required CryptoService cryptoService,
@@ -209,6 +211,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   })  : _loadIdentity = loadIdentity,
         _loadMessageService = loadMessageService,
         _refreshConversation = refreshConversation,
+        _reactionService = reactionService,
         _webRtcManager = webRtcManager,
         _signalingService = signalingService,
         _cryptoService = cryptoService,
@@ -220,6 +223,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   final LoadLocalIdentity _loadIdentity;
   final LoadMessageService _loadMessageService;
   final RefreshConversationMessages _refreshConversation;
+  final ReactionService _reactionService;
   final WebRtcManager _webRtcManager;
   final ManualSignalingService _signalingService;
   final CryptoService _cryptoService;
@@ -440,6 +444,44 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     }
 
     _refreshConversation(conversationId);
+  }
+
+  Future<void> toggleReaction({
+    required Message message,
+    required String emoji,
+  }) async {
+    final conversationId = state.conversationId;
+    if (conversationId == null || !state.isTransportReady) {
+      _setError('Open the secure channel before sending reactions.');
+      return;
+    }
+
+    final identity = await _ensureLocalIdentity();
+    final messageService = await _loadMessageService();
+    final nextReactions = _reactionService.toggleReaction(
+      emoji: emoji,
+      myUserId: identity.fingerprint,
+      currentReactions: message.reactions,
+    );
+
+    await messageService.updateReactions(message.id, nextReactions);
+    _refreshConversation(message.conversationId);
+
+    try {
+      await _webRtcManager.sendText(
+        PeerTransportEnvelope.reaction(
+          messageId: message.id,
+          senderFingerprint: identity.fingerprint,
+          createdAt: DateTime.now(),
+          reactions: nextReactions,
+        ).encodeTransportString(),
+      );
+      state = state.copyWith(lastEvent: 'Message reaction updated.');
+    } catch (error) {
+      await messageService.updateReactions(message.id, message.reactions);
+      _refreshConversation(message.conversationId);
+      _setError('Reaction update failed: $error');
+    }
   }
 
   void updateComposerActivity(String draft) {
@@ -762,6 +804,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         await _handleReceiptEnvelope(envelope);
         return;
       }
+      if (envelope.kind == PeerTransportEnvelopeKind.reaction) {
+        await _handleReactionEnvelope(envelope);
+        return;
+      }
 
       final payload = envelope.payload;
       final messageId = envelope.messageId;
@@ -993,6 +1039,28 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     );
   }
 
+  Future<void> _handleReactionEnvelope(PeerTransportEnvelope envelope) async {
+    final messageId = envelope.messageId;
+    final reactions = envelope.reactions;
+    if (messageId == null || reactions == null) {
+      throw const FormatException(
+        'Incoming reaction update is missing reaction metadata.',
+      );
+    }
+
+    final conversationId = state.conversationId ??
+        conversationIdForFingerprint(envelope.senderFingerprint);
+    final messageService = await _loadMessageService();
+    await messageService.updateReactions(messageId, reactions);
+    _refreshConversation(conversationId);
+
+    state = state.copyWith(
+      remoteFingerprint: envelope.senderFingerprint,
+      conversationId: conversationId,
+      lastEvent: 'Peer updated message reactions.',
+    );
+  }
+
   Future<void> _sendTypingStatus(bool isTyping) async {
     if (!state.isTransportReady) {
       _localTypingActive = false;
@@ -1118,6 +1186,7 @@ enum PeerTransportEnvelopeKind {
   typing,
   presence,
   receipt,
+  reaction,
 }
 
 @immutable
@@ -1133,8 +1202,9 @@ class PeerTransportEnvelope {
     this.replyToBody,
   })  : kind = PeerTransportEnvelopeKind.message,
         isTyping = null,
-      presenceStatus = null,
-        receiptState = null;
+        presenceStatus = null,
+        receiptState = null,
+        reactions = null;
 
   const PeerTransportEnvelope.typing({
     required this.senderFingerprint,
@@ -1148,7 +1218,8 @@ class PeerTransportEnvelope {
         burnAfterRead = null,
         expiresAt = null,
         replyToMessageId = null,
-        replyToBody = null;
+        replyToBody = null,
+        reactions = null;
 
   const PeerTransportEnvelope.presence({
     required this.senderFingerprint,
@@ -1162,7 +1233,8 @@ class PeerTransportEnvelope {
         burnAfterRead = null,
         expiresAt = null,
         replyToMessageId = null,
-        replyToBody = null;
+        replyToBody = null,
+        reactions = null;
 
   const PeerTransportEnvelope.receipt({
     required this.messageId,
@@ -1172,6 +1244,22 @@ class PeerTransportEnvelope {
   })  : kind = PeerTransportEnvelopeKind.receipt,
         isTyping = null,
         presenceStatus = null,
+        payload = null,
+        burnAfterRead = null,
+        expiresAt = null,
+        replyToMessageId = null,
+        replyToBody = null,
+        reactions = null;
+
+  const PeerTransportEnvelope.reaction({
+    required this.messageId,
+    required this.senderFingerprint,
+    required this.createdAt,
+    required this.reactions,
+  })  : kind = PeerTransportEnvelopeKind.reaction,
+        isTyping = null,
+        presenceStatus = null,
+        receiptState = null,
         payload = null,
         burnAfterRead = null,
         expiresAt = null,
@@ -1190,6 +1278,7 @@ class PeerTransportEnvelope {
   final bool? isTyping;
   final PeerPresenceStatus? presenceStatus;
   final MessageDeliveryState? receiptState;
+  final Map<String, List<String>>? reactions;
 
   Map<String, dynamic> toJson() {
     return <String, dynamic>{
@@ -1207,6 +1296,9 @@ class PeerTransportEnvelope {
         'isTyping': isTyping,
       } else if (kind == PeerTransportEnvelopeKind.presence) ...<String, dynamic>{
         'presenceStatus': presenceStatus!.name,
+      } else if (kind == PeerTransportEnvelopeKind.reaction) ...<String, dynamic>{
+        'messageId': messageId,
+        'reactions': reactions,
       } else ...<String, dynamic>{
         'messageId': messageId,
         'receiptState': receiptState!.name,
@@ -1221,6 +1313,7 @@ class PeerTransportEnvelope {
       'typing' => PeerTransportEnvelopeKind.typing,
       'presence' => PeerTransportEnvelopeKind.presence,
       'receipt' => PeerTransportEnvelopeKind.receipt,
+      'reaction' => PeerTransportEnvelopeKind.reaction,
       _ => PeerTransportEnvelopeKind.message,
     };
 
@@ -1254,6 +1347,20 @@ class PeerTransportEnvelope {
             : MessageDeliveryState.values.byName(
                 json['receiptState'] as String,
               ),
+      );
+    }
+
+    if (kind == PeerTransportEnvelopeKind.reaction) {
+      return PeerTransportEnvelope.reaction(
+        messageId: json['messageId'] as String,
+        senderFingerprint: json['senderFingerprint'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        reactions: (json['reactions'] as Map<String, dynamic>).map(
+          (emoji, users) => MapEntry(
+            emoji,
+            List<String>.from(users as List<dynamic>),
+          ),
+        ),
       );
     }
 

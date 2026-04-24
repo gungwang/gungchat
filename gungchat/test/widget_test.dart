@@ -39,6 +39,7 @@ void main() {
     WidgetTester tester,
   ) async {
     var replyInvoked = false;
+    var jumpInvoked = false;
     final message = Message(
       id: '2',
       conversationId: 'bootstrap',
@@ -62,6 +63,9 @@ void main() {
               onReply: () {
                 replyInvoked = true;
               },
+              onQuotedMessageTap: () {
+                jumpInvoked = true;
+              },
             ),
           ),
         ),
@@ -71,9 +75,57 @@ void main() {
     expect(find.text('Quoted message'), findsOneWidget);
     expect(find.text('earlier message body'), findsOneWidget);
 
+    await tester.tap(find.text('earlier message body'));
+    await tester.pump();
+
+    expect(jumpInvoked, isTrue);
+
     await tester.longPress(find.text('follow up message'));
     await tester.pump();
 
     expect(replyInvoked, isTrue);
+  });
+
+  testWidgets('message bubble renders reactions and toggles them', (
+    WidgetTester tester,
+  ) async {
+    String? toggledEmoji;
+    final message = Message(
+      id: '3',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: 'react to this message',
+      type: MessageType.text,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 35),
+      isOutgoing: true,
+      reactions: const {
+        '👍': ['peer-a', 'peer-b'],
+      },
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(12),
+            child: MessageBubble(
+              message: message,
+              currentUserId: 'peer-a',
+              onToggleReaction: (emoji) {
+                toggledEmoji = emoji;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('👍 2'), findsOneWidget);
+
+    await tester.tap(find.text('👍 2'));
+    await tester.pump();
+
+    expect(toggledEmoji, '👍');
   });
 }
