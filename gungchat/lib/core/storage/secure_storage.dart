@@ -17,5 +17,7 @@ class AppSecureStorage {
 
   Future<void> delete(String key) => _client.delete(key: key);
 
+  Future<void> deleteAll() => _client.deleteAll();
+
   Future<Map<String, String>> readAll() => _client.readAll();
 }

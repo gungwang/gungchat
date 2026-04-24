@@ -45,6 +45,7 @@ class MessageService {
     String? replyToBody,
     String? audioFilePath,
     int? audioDurationMs,
+    List<Attachment> attachments = const <Attachment>[],
   }) async {
     final message = Message(
       id: _uuid.v4(),
@@ -64,6 +65,7 @@ class MessageService {
       replyToBody: replyToBody,
       audioFilePath: audioFilePath,
       audioDurationMs: audioDurationMs,
+      attachments: attachments,
     );
 
     await _messageDatabase.upsertMessage(message);
@@ -111,13 +113,27 @@ class MessageService {
       deletedAt: deletedAt,
       mode: mode,
     );
-    await _deleteAudioFileIfPresent(existingMessage?.audioFilePath);
+    await _deleteStoredFiles(existingMessage);
   }
 
   Future<void> deleteMessage(String messageId) async {
     final existingMessage = await _messageDatabase.getMessage(messageId);
     await _messageDatabase.deleteMessage(messageId);
-    await _deleteAudioFileIfPresent(existingMessage?.audioFilePath);
+    await _deleteStoredFiles(existingMessage);
+  }
+
+  Future<void> clearConversation(String conversationId) async {
+    final storedFilePaths = await _messageDatabase.listStoredFilePaths(
+      conversationId: conversationId,
+    );
+    await _messageDatabase.deleteConversation(conversationId);
+    await _deleteFiles(storedFilePaths);
+  }
+
+  Future<void> wipeAllLocalData() async {
+    final storedFilePaths = await _messageDatabase.listStoredFilePaths();
+    await _messageDatabase.clearAllData();
+    await _deleteFiles(storedFilePaths);
   }
 
   Future<void> toggleStar(String messageId) {
@@ -153,5 +169,29 @@ class MessageService {
     if (await file.exists()) {
       await file.delete();
     }
+  }
+
+  Future<void> _deleteAudioFiles(Iterable<String> filePaths) async {
+    for (final filePath in filePaths) {
+      await _deleteAudioFileIfPresent(filePath);
+    }
+  }
+
+  Future<void> _deleteStoredFiles(Message? message) async {
+    if (message == null) {
+      return;
+    }
+
+    final filePaths = <String>{
+      if (message.audioFilePath != null && message.audioFilePath!.trim().isNotEmpty)
+        message.audioFilePath!,
+      for (final attachment in message.attachments)
+        if (attachment.hasFilePath) attachment.filePath!,
+    };
+    await _deleteFiles(filePaths);
+  }
+
+  Future<void> _deleteFiles(Iterable<String> filePaths) async {
+    await _deleteAudioFiles(filePaths);
   }
 }

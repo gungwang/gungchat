@@ -13,6 +13,8 @@ import '../../core/networking/signaling_service.dart';
 import '../../core/networking/webrtc_manager.dart';
 import '../../models/contact.dart';
 import '../../models/message.dart';
+import 'attachment_message_payload.dart';
+import 'attachment_message_service.dart';
 import 'message_service.dart';
 import 'presence_status.dart';
 import 'reaction_service.dart';
@@ -22,7 +24,9 @@ import 'voice_message_service.dart';
 typedef LoadLocalIdentity = Future<DeviceIdentity> Function();
 typedef LoadMessageService = Future<MessageService> Function();
 typedef LoadVoiceMessageService = VoiceMessageService Function();
+typedef LoadAttachmentMessageService = AttachmentMessageService Function();
 typedef RefreshConversationMessages = void Function(String conversationId);
+typedef IsBlockedFingerprint = bool Function(String fingerprint);
 
 enum PeerSessionRole {
   initiator,
@@ -113,6 +117,7 @@ class PeerSessionState {
     this.targetAddress,
     this.isRemoteTyping = false,
     this.remotePresenceStatus,
+    this.remoteStatusText,
     this.history = const [],
   });
 
@@ -132,6 +137,7 @@ class PeerSessionState {
   final String? targetAddress;
   final bool isRemoteTyping;
   final PeerPresenceStatus? remotePresenceStatus;
+  final String? remoteStatusText;
   final List<PeerSessionHistoryEntry> history;
 
   bool get isSessionActive => sessionId != null;
@@ -158,6 +164,7 @@ class PeerSessionState {
     Object? targetAddress = _sentinel,
     bool? isRemoteTyping,
     Object? remotePresenceStatus = _sentinel,
+    Object? remoteStatusText = _sentinel,
     List<PeerSessionHistoryEntry>? history,
   }) {
     return PeerSessionState(
@@ -196,6 +203,9 @@ class PeerSessionState {
       remotePresenceStatus: identical(remotePresenceStatus, _sentinel)
           ? this.remotePresenceStatus
           : remotePresenceStatus as PeerPresenceStatus?,
+      remoteStatusText: identical(remoteStatusText, _sentinel)
+          ? this.remoteStatusText
+          : remoteStatusText as String?,
       history: history ?? this.history,
     );
   }
@@ -206,20 +216,24 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     required LoadLocalIdentity loadIdentity,
     required LoadMessageService loadMessageService,
     required LoadVoiceMessageService loadVoiceMessageService,
+    required LoadAttachmentMessageService loadAttachmentMessageService,
     required RefreshConversationMessages refreshConversation,
     required ReactionService reactionService,
     required WebRtcManager webRtcManager,
     required ManualSignalingService signalingService,
     required CryptoService cryptoService,
+    required IsBlockedFingerprint isBlockedFingerprint,
     Uuid? uuid,
   })  : _loadIdentity = loadIdentity,
         _loadMessageService = loadMessageService,
-      _loadVoiceMessageService = loadVoiceMessageService,
+        _loadVoiceMessageService = loadVoiceMessageService,
+        _loadAttachmentMessageService = loadAttachmentMessageService,
         _refreshConversation = refreshConversation,
         _reactionService = reactionService,
         _webRtcManager = webRtcManager,
         _signalingService = signalingService,
         _cryptoService = cryptoService,
+        _isBlockedFingerprint = isBlockedFingerprint,
         _uuid = uuid ?? const Uuid(),
         super(const PeerSessionState()) {
     _stateSubscription = _webRtcManager.states.listen(_handleTransportState);
@@ -228,11 +242,13 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   final LoadLocalIdentity _loadIdentity;
   final LoadMessageService _loadMessageService;
   final LoadVoiceMessageService _loadVoiceMessageService;
+  final LoadAttachmentMessageService _loadAttachmentMessageService;
   final RefreshConversationMessages _refreshConversation;
   final ReactionService _reactionService;
   final WebRtcManager _webRtcManager;
   final ManualSignalingService _signalingService;
   final CryptoService _cryptoService;
+  final IsBlockedFingerprint _isBlockedFingerprint;
   final Uuid _uuid;
 
   StreamSubscription<WebRtcSessionState>? _stateSubscription;
@@ -246,8 +262,14 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   Timer? _remoteTypingTimer;
   bool _localTypingActive = false;
   PeerPresenceStatus? _lastSentPresenceStatus;
+  String? _lastSentCustomStatusText;
 
   Future<void> startOffer({Contact? targetContact}) async {
+    if (targetContact != null && _isBlockedFingerprint(targetContact.fingerprint)) {
+      _setError('Blocked contacts cannot start peer sessions.');
+      return;
+    }
+
     final identity = await _ensureLocalIdentity();
     final sessionId = _uuid.v4();
 
@@ -302,6 +324,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       return;
     }
 
+    if (targetContact != null && _isBlockedFingerprint(targetContact.fingerprint)) {
+      _setError('Signals from blocked contacts cannot be applied.');
+      return;
+    }
+
     state = state.copyWith(
       isApplyingSignal: true,
       lastError: null,
@@ -334,6 +361,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     String? replyToMessageId,
     String? replyToBody,
   }) async {
+    if (!_ensurePeerAllowed('send messages')) {
+      return false;
+    }
+
     final conversationId = state.conversationId;
     final sharedSecret = _sharedSecret;
     if (conversationId == null ||
@@ -401,6 +432,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     String? replyToMessageId,
     String? replyToBody,
   }) async {
+    if (!_ensurePeerAllowed('send voice messages')) {
+      return false;
+    }
+
     final conversationId = state.conversationId;
     final sharedSecret = _sharedSecret;
     if (conversationId == null ||
@@ -471,10 +506,97 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     }
   }
 
+  Future<bool> sendAttachments({
+    required MessageType messageType,
+    required List<Attachment> attachments,
+    required bool burnAfterRead,
+    String? replyToMessageId,
+    String? replyToBody,
+  }) async {
+    if (!_ensurePeerAllowed('send attachments')) {
+      return false;
+    }
+
+    final conversationId = state.conversationId;
+    final sharedSecret = _sharedSecret;
+    if (conversationId == null ||
+        sharedSecret == null ||
+        !state.isTransportReady) {
+      _setError(
+        'The secure data channel is not open yet. Finish the signal exchange first.',
+      );
+      return false;
+    }
+    if (attachments.isEmpty) {
+      _setError('Choose at least one attachment before sending.');
+      return false;
+    }
+
+    final identity = await _ensureLocalIdentity();
+    final messageService = await _loadMessageService();
+    final attachmentService = _loadAttachmentMessageService();
+
+    final message = await messageService.createLocalMessage(
+      conversationId: conversationId,
+      senderId: identity.fingerprint,
+      body: '',
+      type: messageType,
+      burnAfterRead: burnAfterRead,
+      deliveryState: MessageDeliveryState.sending,
+      replyToMessageId: replyToMessageId,
+      replyToBody: replyToBody,
+      attachments: attachments,
+    );
+    _refreshConversation(conversationId);
+
+    try {
+      final transportAttachments = await attachmentService.loadTransportAttachments(
+        attachments,
+      );
+      final payloadText = AttachmentMessagePayload(
+        messageType: messageType,
+        attachments: transportAttachments,
+      ).encodeTransportString();
+      final encryptedPayload = await messageService.encryptForTransport(
+        body: payloadText,
+        sharedSecret: sharedSecret,
+      );
+      final transportEnvelope = PeerTransportEnvelope.message(
+        messageId: message.id,
+        senderFingerprint: identity.fingerprint,
+        payload: encryptedPayload,
+        createdAt: message.createdAt,
+        burnAfterRead: burnAfterRead,
+        expiresAt: message.expiresAt,
+        replyToMessageId: message.replyToMessageId,
+        replyToBody: message.replyToBody,
+      );
+
+      await clearLocalTyping(notifyPeer: false);
+      await _webRtcManager.sendText(transportEnvelope.encodeTransportString());
+      await messageService.updateDeliveryState(
+        message.id,
+        MessageDeliveryState.sent,
+      );
+      _refreshConversation(conversationId);
+      state = state.copyWith(lastEvent: 'Secure attachments sent.');
+      return true;
+    } catch (error) {
+      await messageService.updateDeliveryState(
+        message.id,
+        MessageDeliveryState.failed,
+      );
+      _refreshConversation(conversationId);
+      _setError('Attachment send failed: $error');
+      return false;
+    }
+  }
+
   Future<void> resetSession() async {
     await clearLocalTyping(notifyPeer: false);
     _remoteTypingTimer?.cancel();
     _lastSentPresenceStatus = null;
+    _lastSentCustomStatusText = null;
     _sharedSecret = null;
     _peerConnectionReady = false;
     _hasRemoteDescription = false;
@@ -484,7 +606,9 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   }
 
   Future<void> syncPresence(PeerPresenceStatus status) async {
-    if (!state.isTransportReady || _lastSentPresenceStatus == status) {
+    if (!state.isTransportReady ||
+        _lastSentPresenceStatus == status ||
+        !_ensurePeerAllowed('share presence')) {
       return;
     }
 
@@ -501,6 +625,30 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       _lastSentPresenceStatus = status;
     } catch (error, stackTrace) {
       debugPrint('Presence update failed: $error\n$stackTrace');
+    }
+  }
+
+  Future<void> syncCustomStatusText(String text) async {
+    final normalized = text.trim();
+    if (!state.isTransportReady ||
+        _lastSentCustomStatusText == normalized ||
+        !_ensurePeerAllowed('share custom status')) {
+      return;
+    }
+
+    final identity = await _ensureLocalIdentity();
+
+    try {
+      await _webRtcManager.sendText(
+        PeerTransportEnvelope.statusText(
+          senderFingerprint: identity.fingerprint,
+          createdAt: DateTime.now(),
+          statusText: normalized.isEmpty ? null : normalized,
+        ).encodeTransportString(),
+      );
+      _lastSentCustomStatusText = normalized;
+    } catch (error, stackTrace) {
+      debugPrint('Custom status update failed: $error\n$stackTrace');
     }
   }
 
@@ -532,6 +680,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     required Message message,
     required String emoji,
   }) async {
+    if (!_ensurePeerAllowed('update reactions')) {
+      return;
+    }
+
     final conversationId = state.conversationId;
     if (conversationId == null || !state.isTransportReady) {
       _setError('Open the secure channel before sending reactions.');
@@ -570,6 +722,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     required Message message,
     required String body,
   }) async {
+    if (!_ensurePeerAllowed('edit messages')) {
+      return false;
+    }
+
     final conversationId = state.conversationId;
     if (conversationId == null || !state.isTransportReady) {
       _setError('Open the secure channel before editing messages.');
@@ -620,6 +776,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     required Message message,
     required MessageDeleteMode mode,
   }) async {
+    if (!_ensurePeerAllowed('delete messages')) {
+      return false;
+    }
+
     final conversationId = state.conversationId;
     if (conversationId == null || !state.isTransportReady) {
       _setError('Open the secure channel before deleting messages.');
@@ -902,6 +1062,12 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     final remoteFingerprint = await _fingerprintForPublicKey(remotePublicKey);
     final expectedRemoteFingerprint = state.expectedRemoteFingerprint;
 
+    if (_isBlockedFingerprint(remoteFingerprint)) {
+      throw StateError(
+        'Remote fingerprint $remoteFingerprint is blocked on this device.',
+      );
+    }
+
     if (expectedRemoteFingerprint != null &&
         expectedRemoteFingerprint != remoteFingerprint) {
       throw StateError(
@@ -973,12 +1139,22 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
 
     try {
       final envelope = PeerTransportEnvelope.decodeTransportString(rawMessage);
+      if (_isBlockedFingerprint(envelope.senderFingerprint)) {
+        state = state.copyWith(
+          lastEvent: 'Ignored transport data from a blocked contact.',
+        );
+        return;
+      }
       if (envelope.kind == PeerTransportEnvelopeKind.typing) {
         _handleRemoteTypingEnvelope(envelope);
         return;
       }
       if (envelope.kind == PeerTransportEnvelopeKind.presence) {
         _handlePresenceEnvelope(envelope);
+        return;
+      }
+      if (envelope.kind == PeerTransportEnvelopeKind.statusText) {
+        _handleStatusTextEnvelope(envelope);
         return;
       }
       if (envelope.kind == PeerTransportEnvelopeKind.receipt) {
@@ -1021,21 +1197,44 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
           conversationIdForFingerprint(envelope.senderFingerprint);
 
       final voicePayload = VoiceMessagePayload.tryDecodeTransportString(body);
+      final attachmentPayload = voicePayload == null
+          ? AttachmentMessagePayload.tryDecodeTransportString(body)
+          : null;
       final message = voicePayload == null
-          ? Message(
-              id: messageId,
-              conversationId: conversationId,
-              senderId: envelope.senderFingerprint,
-              body: body,
-              type: MessageType.text,
-              deliveryState: MessageDeliveryState.delivered,
-              createdAt: envelope.createdAt,
-              isOutgoing: false,
-              burnAfterRead: envelope.burnAfterRead ?? true,
-              expiresAt: envelope.expiresAt,
-              replyToMessageId: envelope.replyToMessageId,
-              replyToBody: envelope.replyToBody,
-            )
+          ? attachmentPayload == null
+              ? Message(
+                  id: messageId,
+                  conversationId: conversationId,
+                  senderId: envelope.senderFingerprint,
+                  body: body,
+                  type: MessageType.text,
+                  deliveryState: MessageDeliveryState.delivered,
+                  createdAt: envelope.createdAt,
+                  isOutgoing: false,
+                  burnAfterRead: envelope.burnAfterRead ?? true,
+                  expiresAt: envelope.expiresAt,
+                  replyToMessageId: envelope.replyToMessageId,
+                  replyToBody: envelope.replyToBody,
+                )
+              : Message(
+                  id: messageId,
+                  conversationId: conversationId,
+                  senderId: envelope.senderFingerprint,
+                  body: '',
+                  type: attachmentPayload.messageType,
+                  deliveryState: MessageDeliveryState.delivered,
+                  createdAt: envelope.createdAt,
+                  isOutgoing: false,
+                  burnAfterRead: envelope.burnAfterRead ?? true,
+                  expiresAt: envelope.expiresAt,
+                  replyToMessageId: envelope.replyToMessageId,
+                  replyToBody: envelope.replyToBody,
+                  attachments: await _loadAttachmentMessageService()
+                      .saveInboundAttachments(
+                    messageId: messageId,
+                    attachments: attachmentPayload.attachments,
+                  ),
+                )
           : Message(
               id: messageId,
               conversationId: conversationId,
@@ -1070,8 +1269,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         conversationId: conversationId,
         isRemoteTyping: false,
         lastEvent: voicePayload == null
+          ? attachmentPayload == null
             ? 'Secure message received.'
-            : 'Secure voice message received.',
+            : 'Secure attachments received.'
+          : 'Secure voice message received.',
       );
     } catch (error) {
       _setError('Incoming peer message failed to process: $error');
@@ -1112,6 +1313,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       nextState = nextState.copyWith(
         isRemoteTyping: false,
         remotePresenceStatus: null,
+        remoteStatusText: null,
       );
     }
 
@@ -1223,10 +1425,31 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       remoteFingerprint: envelope.senderFingerprint,
       conversationId: conversationId,
       remotePresenceStatus: presenceStatus,
+      remoteStatusText: presenceStatus == null ||
+              presenceStatus == PeerPresenceStatus.hidden
+          ? null
+          : state.remoteStatusText,
       lastEvent: presenceStatus == null ||
               presenceStatus == PeerPresenceStatus.hidden
           ? 'Peer presence is hidden.'
           : 'Peer is now ${presenceStatus.label.toLowerCase()}.',
+    );
+  }
+
+  void _handleStatusTextEnvelope(PeerTransportEnvelope envelope) {
+    final conversationId = state.conversationId ??
+        conversationIdForFingerprint(envelope.senderFingerprint);
+    final statusText = envelope.statusText?.trim();
+
+    state = state.copyWith(
+      remoteFingerprint: envelope.senderFingerprint,
+      conversationId: conversationId,
+      remoteStatusText: statusText == null || statusText.isEmpty
+          ? null
+          : statusText,
+      lastEvent: statusText == null || statusText.isEmpty
+          ? 'Peer cleared their custom status.'
+          : 'Peer updated their custom status.',
     );
   }
 
@@ -1456,12 +1679,23 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   void _setError(String message) {
     state = state.copyWith(lastError: message);
   }
+
+  bool _ensurePeerAllowed(String action) {
+    final fingerprint = state.remoteFingerprint ?? state.expectedRemoteFingerprint;
+    if (fingerprint == null || !_isBlockedFingerprint(fingerprint)) {
+      return true;
+    }
+
+    _setError('Blocked contacts cannot $action.');
+    return false;
+  }
 }
 
 enum PeerTransportEnvelopeKind {
   message,
   typing,
   presence,
+  statusText,
   receipt,
   reaction,
   messageEdit,
@@ -1482,6 +1716,7 @@ class PeerTransportEnvelope {
   })  : kind = PeerTransportEnvelopeKind.message,
         isTyping = null,
         presenceStatus = null,
+      statusText = null,
         receiptState = null,
       reactions = null,
       content = null,
@@ -1493,6 +1728,7 @@ class PeerTransportEnvelope {
     required this.isTyping,
   })  : kind = PeerTransportEnvelopeKind.typing,
         presenceStatus = null,
+      statusText = null,
         receiptState = null,
         messageId = null,
         payload = null,
@@ -1510,6 +1746,25 @@ class PeerTransportEnvelope {
     required this.presenceStatus,
   })  : kind = PeerTransportEnvelopeKind.presence,
         isTyping = null,
+      statusText = null,
+        receiptState = null,
+        messageId = null,
+        payload = null,
+        burnAfterRead = null,
+        expiresAt = null,
+        replyToMessageId = null,
+        replyToBody = null,
+        reactions = null,
+        content = null,
+        deleteMode = null;
+
+  const PeerTransportEnvelope.statusText({
+    required this.senderFingerprint,
+    required this.createdAt,
+    required this.statusText,
+  })  : kind = PeerTransportEnvelopeKind.statusText,
+        isTyping = null,
+        presenceStatus = null,
         receiptState = null,
         messageId = null,
         payload = null,
@@ -1529,6 +1784,7 @@ class PeerTransportEnvelope {
   })  : kind = PeerTransportEnvelopeKind.receipt,
         isTyping = null,
         presenceStatus = null,
+      statusText = null,
         payload = null,
         burnAfterRead = null,
         expiresAt = null,
@@ -1546,6 +1802,7 @@ class PeerTransportEnvelope {
   })  : kind = PeerTransportEnvelopeKind.reaction,
         isTyping = null,
         presenceStatus = null,
+      statusText = null,
         receiptState = null,
         payload = null,
         burnAfterRead = null,
@@ -1563,6 +1820,7 @@ class PeerTransportEnvelope {
   })  : kind = PeerTransportEnvelopeKind.messageEdit,
         isTyping = null,
         presenceStatus = null,
+      statusText = null,
         receiptState = null,
         reactions = null,
         payload = null,
@@ -1580,6 +1838,7 @@ class PeerTransportEnvelope {
   })  : kind = PeerTransportEnvelopeKind.messageDelete,
         isTyping = null,
         presenceStatus = null,
+      statusText = null,
         receiptState = null,
         reactions = null,
         payload = null,
@@ -1600,6 +1859,7 @@ class PeerTransportEnvelope {
   final String? replyToBody;
   final bool? isTyping;
   final PeerPresenceStatus? presenceStatus;
+  final String? statusText;
   final MessageDeliveryState? receiptState;
   final Map<String, List<String>>? reactions;
   final String? content;
@@ -1621,6 +1881,8 @@ class PeerTransportEnvelope {
         'isTyping': isTyping,
       } else if (kind == PeerTransportEnvelopeKind.presence) ...<String, dynamic>{
         'presenceStatus': presenceStatus!.name,
+      } else if (kind == PeerTransportEnvelopeKind.statusText) ...<String, dynamic>{
+        'statusText': statusText,
       } else if (kind == PeerTransportEnvelopeKind.reaction) ...<String, dynamic>{
         'messageId': messageId,
         'reactions': reactions,
@@ -1643,6 +1905,7 @@ class PeerTransportEnvelope {
     final kind = switch (json['kind'] as String?) {
       'typing' => PeerTransportEnvelopeKind.typing,
       'presence' => PeerTransportEnvelopeKind.presence,
+      'statusText' => PeerTransportEnvelopeKind.statusText,
       'receipt' => PeerTransportEnvelopeKind.receipt,
       'reaction' => PeerTransportEnvelopeKind.reaction,
       'messageEdit' => PeerTransportEnvelopeKind.messageEdit,
@@ -1694,6 +1957,14 @@ class PeerTransportEnvelope {
             List<String>.from(users as List<dynamic>),
           ),
         ),
+      );
+    }
+
+    if (kind == PeerTransportEnvelopeKind.statusText) {
+      return PeerTransportEnvelope.statusText(
+        senderFingerprint: json['senderFingerprint'] as String,
+        createdAt: DateTime.parse(json['createdAt'] as String),
+        statusText: json['statusText'] as String?,
       );
     }
 
