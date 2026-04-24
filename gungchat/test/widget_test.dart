@@ -168,4 +168,96 @@ void main() {
 
     expect(toggledStar, isTrue);
   });
+
+  testWidgets('message bubble renders edited metadata and action menu', (
+    WidgetTester tester,
+  ) async {
+    var editTapped = false;
+    MessageDeleteMode? deleteMode;
+    final message = Message(
+      id: '5',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: 'revised text',
+      type: MessageType.text,
+      deliveryState: MessageDeliveryState.read,
+      createdAt: DateTime(2026, 4, 16, 9, 40),
+      editedAt: DateTime(2026, 4, 16, 9, 41),
+      isOutgoing: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(12),
+            child: MessageBubble(
+              message: message,
+              onEdit: () {
+                editTapped = true;
+              },
+              onDelete: (mode) {
+                deleteMode = mode;
+              },
+            ),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.textContaining('edited'), findsOneWidget);
+
+    await tester.tap(find.byKey(const ValueKey('message-actions-button')));
+    await tester.pumpAndSettle();
+
+    final dynamic editItemState = tester.state(
+      find.byKey(const ValueKey('message-action-edit')),
+    );
+    editItemState.handleTap();
+    await tester.pumpAndSettle();
+
+    expect(editTapped, isTrue);
+
+    await tester.tap(find.byKey(const ValueKey('message-actions-button')));
+    await tester.pumpAndSettle();
+
+    final dynamic deleteItemState = tester.state(
+      find.byKey(const ValueKey('message-action-delete')),
+    );
+    deleteItemState.handleTap();
+    await tester.pumpAndSettle();
+
+    expect(deleteMode, MessageDeleteMode.tombstone);
+  });
+
+  testWidgets('message bubble renders deleted placeholder', (
+    WidgetTester tester,
+  ) async {
+    final message = Message(
+      id: '6',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: '',
+      type: MessageType.text,
+      deliveryState: MessageDeliveryState.read,
+      createdAt: DateTime(2026, 4, 16, 9, 42),
+      deletedAt: DateTime(2026, 4, 16, 9, 43),
+      deleteMode: MessageDeleteMode.tombstone,
+      isOutgoing: true,
+    );
+
+    await tester.pumpWidget(
+      MaterialApp(
+        home: Scaffold(
+          body: Padding(
+            padding: const EdgeInsets.all(12),
+            child: MessageBubble(message: message),
+          ),
+        ),
+      ),
+    );
+
+    expect(find.text('Message deleted'), findsOneWidget);
+    expect(find.textContaining('• deleted'), findsOneWidget);
+  });
 }

@@ -137,6 +137,40 @@ void main() {
       });
     });
 
+    test('round-trips message edit envelopes', () {
+      final envelope = PeerTransportEnvelope.messageEdit(
+        messageId: 'message-5',
+        senderFingerprint: 'ab:cd:ef:12',
+        createdAt: DateTime.utc(2025, 1, 2, 3, 4, 5),
+        content: 'updated body',
+      );
+
+      final decoded = PeerTransportEnvelope.decodeTransportString(
+        envelope.encodeTransportString(),
+      );
+
+      expect(decoded.kind, PeerTransportEnvelopeKind.messageEdit);
+      expect(decoded.messageId, 'message-5');
+      expect(decoded.content, 'updated body');
+    });
+
+    test('round-trips message delete envelopes', () {
+      final envelope = PeerTransportEnvelope.messageDelete(
+        messageId: 'message-6',
+        senderFingerprint: 'ab:cd:ef:34',
+        createdAt: DateTime.utc(2025, 1, 2, 3, 4, 5),
+        deleteMode: MessageDeleteMode.hardDelete,
+      );
+
+      final decoded = PeerTransportEnvelope.decodeTransportString(
+        envelope.encodeTransportString(),
+      );
+
+      expect(decoded.kind, PeerTransportEnvelopeKind.messageDelete);
+      expect(decoded.messageId, 'message-6');
+      expect(decoded.deleteMode, MessageDeleteMode.hardDelete);
+    });
+
     test('decodes legacy message envelopes without kind', () {
       final legacyJson = jsonEncode({
         'messageId': 'legacy-message',

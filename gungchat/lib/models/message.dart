@@ -17,6 +17,11 @@ enum MessageDeliveryState {
   failed,
 }
 
+enum MessageDeleteMode {
+  tombstone,
+  hardDelete,
+}
+
 @immutable
 class Message {
   const Message({
@@ -34,6 +39,9 @@ class Message {
     this.replyToBody,
     this.reactions = const {},
     this.isStarred = false,
+    this.editedAt,
+    this.deletedAt,
+    this.deleteMode,
   });
 
   final String id;
@@ -50,10 +58,15 @@ class Message {
   final String? replyToBody;
   final Map<String, List<String>> reactions;
   final bool isStarred;
+  final DateTime? editedAt;
+  final DateTime? deletedAt;
+  final MessageDeleteMode? deleteMode;
 
   bool get isExpired => expiresAt != null && expiresAt!.isBefore(DateTime.now());
   bool get hasReply => replyToBody != null && replyToBody!.trim().isNotEmpty;
   bool get hasReactions => reactions.isNotEmpty;
+  bool get isEdited => editedAt != null && !isDeleted;
+  bool get isDeleted => deletedAt != null;
 
   Message copyWith({
     String? id,
@@ -72,6 +85,12 @@ class Message {
     bool clearReplyTo = false,
     Map<String, List<String>>? reactions,
     bool? isStarred,
+    DateTime? editedAt,
+    bool clearEditedAt = false,
+    DateTime? deletedAt,
+    bool clearDeletedAt = false,
+    MessageDeleteMode? deleteMode,
+    bool clearDeleteMode = false,
   }) {
     return Message(
       id: id ?? this.id,
@@ -89,6 +108,9 @@ class Message {
       replyToBody: clearReplyTo ? null : replyToBody ?? this.replyToBody,
       reactions: reactions ?? this.reactions,
       isStarred: isStarred ?? this.isStarred,
+      editedAt: clearEditedAt ? null : editedAt ?? this.editedAt,
+      deletedAt: clearDeletedAt ? null : deletedAt ?? this.deletedAt,
+      deleteMode: clearDeleteMode ? null : deleteMode ?? this.deleteMode,
     );
   }
 
@@ -138,6 +160,9 @@ class Message {
       'reply_to_message_id': replyToMessageId,
       'reply_to_body': replyToBody,
       'reactions_json': encodeReactions(reactions),
+      'edited_at': editedAt?.toIso8601String(),
+      'deleted_at': deletedAt?.toIso8601String(),
+      'delete_mode': deleteMode?.name,
     };
   }
 
@@ -161,6 +186,15 @@ class Message {
       replyToBody: map['reply_to_body'] as String?,
       reactions: decodeReactions(map['reactions_json']),
       isStarred: (map['is_starred'] as int?) == 1,
+      editedAt: map['edited_at'] == null
+          ? null
+          : DateTime.parse(map['edited_at']! as String),
+      deletedAt: map['deleted_at'] == null
+          ? null
+          : DateTime.parse(map['deleted_at']! as String),
+      deleteMode: map['delete_mode'] == null
+          ? null
+          : MessageDeleteMode.values.byName(map['delete_mode']! as String),
     );
   }
 }
