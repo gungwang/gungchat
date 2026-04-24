@@ -14,6 +14,7 @@ class SettingsScreen extends ConsumerWidget {
     final themeMode = ref.watch(themeModeProvider);
     final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
     final localPresenceStatus = ref.watch(localPresenceStatusProvider);
+    final linkPreviewsEnabled = ref.watch(linkPreviewsEnabledProvider);
 
     return SafeArea(
       child: ListView(
@@ -83,6 +84,22 @@ class SettingsScreen extends ConsumerWidget {
               title: const Text('Read receipts'),
               subtitle: const Text(
                 'Opt in to send encrypted read confirmations when you open a conversation and view delivered messages.',
+              ),
+            ),
+          ),
+          Card(
+            child: SwitchListTile.adaptive(
+              value: linkPreviewsEnabled,
+              onChanged: (value) {
+                unawaited(
+                  ref
+                      .read(linkPreviewsEnabledProvider.notifier)
+                      .setEnabled(value),
+                );
+              },
+              title: const Text('Link previews'),
+              subtitle: const Text(
+                'Off by default for privacy. Enabling previews lets your device fetch webpage metadata directly, which can reveal your IP address to those sites.',
               ),
             ),
           ),
