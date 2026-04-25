@@ -288,6 +288,110 @@ void main() {
     expect(playedAudio, isTrue);
   });
 
+  testWidgets('message bubble renders shared location attachments', (
+    WidgetTester tester,
+  ) async {
+    final message = Message(
+      id: '8a',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: '',
+      type: MessageType.location,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 44),
+      isOutgoing: false,
+      attachments: const [
+        Attachment(
+          id: 'loc-1',
+          type: AttachmentType.location,
+          displayName: 'Current location',
+          metadata: {
+            'latitude': 37.7749,
+            'longitude': -122.4194,
+          },
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        MessageBubble(message: message),
+      ),
+    );
+
+    expect(find.text('Shared location'), findsOneWidget);
+    expect(find.text('Lat 37.7749, Lng -122.4194'), findsOneWidget);
+  });
+
+  testWidgets('message bubble renders shared contact card attachments', (
+    WidgetTester tester,
+  ) async {
+    final message = Message(
+      id: '8b',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: '',
+      type: MessageType.contactCard,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 44),
+      isOutgoing: false,
+      attachments: const [
+        Attachment(
+          id: 'contact-1',
+          type: AttachmentType.contactCard,
+          displayName: '',
+          metadata: {
+            'displayName': 'Alice',
+            'fingerprint': 'peer:alice',
+          },
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        MessageBubble(message: message),
+      ),
+    );
+
+    expect(find.text('Alice'), findsOneWidget);
+    expect(find.text('peer:alice'), findsOneWidget);
+  });
+
+  testWidgets('message bubble renders generic file attachment details', (
+    WidgetTester tester,
+  ) async {
+    final message = Message(
+      id: '8c',
+      conversationId: 'bootstrap',
+      senderId: 'peer-a',
+      body: 'Files attached',
+      type: MessageType.multiAttachment,
+      deliveryState: MessageDeliveryState.sent,
+      createdAt: DateTime(2026, 4, 16, 9, 44),
+      isOutgoing: true,
+      attachments: const [
+        Attachment(
+          id: 'doc-1',
+          type: AttachmentType.document,
+          displayName: 'brief.pdf',
+          mimeType: 'application/pdf',
+          sizeBytes: 2049,
+        ),
+      ],
+    );
+
+    await tester.pumpWidget(
+      _buildTestApp(
+        MessageBubble(message: message),
+      ),
+    );
+
+    expect(find.text('Files attached'), findsOneWidget);
+    expect(find.text('brief.pdf'), findsOneWidget);
+    expect(find.text('application/pdf • 3 KB'), findsOneWidget);
+  });
+
   testWidgets('message bubble renders link preview when previews are enabled', (
     WidgetTester tester,
   ) async {

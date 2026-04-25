@@ -1,15 +1,22 @@
+import 'dart:io' show Platform;
+
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart' as sqflite_ffi;
 
 import '../../models/message.dart';
 
 class MessageDatabase {
-  MessageDatabase({Future<String> Function()? loadDatabasePath})
-      : _loadDatabasePath = loadDatabasePath ?? _defaultDatabasePath;
+  MessageDatabase({
+    Future<String> Function()? loadDatabasePath,
+    DatabaseFactory? databaseFactory,
+  })  : _loadDatabasePath = loadDatabasePath ?? _defaultDatabasePath,
+      _databaseFactory = databaseFactory;
 
   Database? _database;
   final Future<String> Function() _loadDatabasePath;
+    final DatabaseFactory? _databaseFactory;
 
   Future<void> open() async {
     if (_database != null) {
@@ -18,11 +25,12 @@ class MessageDatabase {
 
     final databasePath = await _loadDatabasePath();
 
-    _database = await openDatabase(
+    _database = await (_databaseFactory ?? _defaultDatabaseFactory()).openDatabase(
       databasePath,
-      version: 7,
-      onCreate: (database, version) async {
-        await database.execute('''
+      options: OpenDatabaseOptions(
+        version: 7,
+        onCreate: (database, version) async {
+          await database.execute('''
           CREATE TABLE messages(
             id TEXT PRIMARY KEY,
             conversation_id TEXT NOT NULL,
@@ -44,64 +52,74 @@ class MessageDatabase {
             audio_duration_ms INTEGER,
             attachments_json TEXT
           )
-        ''');
-        await database.execute('''
+          ''');
+          await database.execute('''
           CREATE TABLE starred_messages(
             message_id TEXT PRIMARY KEY,
             starred_at TEXT NOT NULL
           )
         ''');
-        await _createOrganizationTables(database);
-      },
-      onUpgrade: (database, oldVersion, newVersion) async {
-        if (oldVersion < 2) {
-          await database.execute(
+          await _createOrganizationTables(database);
+        },
+        onUpgrade: (database, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await database.execute(
             'ALTER TABLE messages ADD COLUMN reply_to_message_id TEXT',
-          );
-          await database.execute(
+            );
+            await database.execute(
             'ALTER TABLE messages ADD COLUMN reply_to_body TEXT',
-          );
-        }
-        if (oldVersion < 3) {
-          await database.execute(
+            );
+          }
+          if (oldVersion < 3) {
+            await database.execute(
             'ALTER TABLE messages ADD COLUMN reactions_json TEXT',
-          );
-        }
-        if (oldVersion < 4) {
-          await database.execute('''
+            );
+          }
+          if (oldVersion < 4) {
+            await database.execute('''
             CREATE TABLE starred_messages(
               message_id TEXT PRIMARY KEY,
               starred_at TEXT NOT NULL
             )
           ''');
-        }
-        if (oldVersion < 5) {
-          await database.execute(
+          }
+          if (oldVersion < 5) {
+            await database.execute(
             'ALTER TABLE messages ADD COLUMN edited_at TEXT',
-          );
-          await database.execute(
+            );
+            await database.execute(
             'ALTER TABLE messages ADD COLUMN deleted_at TEXT',
-          );
-          await database.execute(
+            );
+            await database.execute(
             'ALTER TABLE messages ADD COLUMN delete_mode TEXT',
-          );
-        }
-        if (oldVersion < 6) {
-          await database.execute(
+            );
+          }
+          if (oldVersion < 6) {
+            await database.execute(
             'ALTER TABLE messages ADD COLUMN audio_file_path TEXT',
-          );
-          await database.execute(
+            );
+            await database.execute(
             'ALTER TABLE messages ADD COLUMN audio_duration_ms INTEGER',
-          );
-        }
-        if (oldVersion < 7) {
-          await database.execute(
+            );
+          }
+          if (oldVersion < 7) {
+            await database.execute(
             'ALTER TABLE messages ADD COLUMN attachments_json TEXT',
-          );
-          await _createOrganizationTables(database);
-        }
-      },
+            );
+            await _createOrganizationTables(database);
+          }
+        },
+      ),
     );
+  }
+
+  static DatabaseFactory _defaultDatabaseFactory() {
+    if (Platform.isWindows) {
+      sqflite_ffi.sqfliteFfiInit();
+      return sqflite_ffi.databaseFactoryFfi;
+    }
+
+    return databaseFactory;
   }
 
   static Future<String> _defaultDatabasePath() async {
