@@ -1,4 +1,9 @@
 ==================================================================
+# NEED HELP TO DEBUG ISSUES | 需要协助调试问题
+Please clone this Repo and debug it to make it working.
+请克隆这个仓库并进行调试，使其能够正常运行。
+==================================================================
+
 
 # GungChat Session 4 Handoff
 
