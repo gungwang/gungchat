@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -29,6 +30,16 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
 
   bool _discovering = false;
   List<DiscoveryCandidate> _nearbyPeers = const [];
+
+  bool get _supportsQrScanning {
+    if (kIsWeb) {
+      return false;
+    }
+
+    return defaultTargetPlatform == TargetPlatform.android ||
+        defaultTargetPlatform == TargetPlatform.iOS ||
+        defaultTargetPlatform == TargetPlatform.macOS;
+  }
 
   @override
   void dispose() {
@@ -71,6 +82,11 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   }
 
   Future<void> _scanContactPayload() async {
+    if (!_supportsQrScanning) {
+      _showSnack('QR scanning is not available on Windows. Paste the contact payload instead.');
+      return;
+    }
+
     final scannedValue = await Navigator.of(context).push<String>(
       MaterialPageRoute(
         builder: (context) => const ContactQrScannerScreen(),
@@ -293,9 +309,11 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                                       version: QrVersions.auto,
                                       size: 220,
                                       eyeStyle: const QrEyeStyle(
+                                        color: Colors.black,
                                         eyeShape: QrEyeShape.square,
                                       ),
                                       dataModuleStyle: const QrDataModuleStyle(
+                                        color: Colors.black,
                                         dataModuleShape:
                                             QrDataModuleShape.square,
                                       ),
@@ -360,11 +378,12 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                           style: theme.textTheme.titleMedium,
                         ),
                       ),
-                      IconButton(
-                        tooltip: 'Scan contact QR',
-                        onPressed: _scanContactPayload,
-                        icon: const Icon(Icons.qr_code_scanner),
-                      ),
+                      if (_supportsQrScanning)
+                        IconButton(
+                          tooltip: 'Scan contact QR',
+                          onPressed: _scanContactPayload,
+                          icon: const Icon(Icons.qr_code_scanner),
+                        ),
                     ],
                   ),
                   const SizedBox(height: 12),

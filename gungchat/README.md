@@ -2,6 +2,11 @@
 
 GungChat is a privacy-first peer-to-peer messenger for Flutter.
 
+Platform-specific handoff guides:
+
+- [Windows 11 build and smoke test](WINDOWS_11_BUILD_AND_SMOKE_TEST.md)
+- [Phase 9.7 manual test checklist](PHASE_9_7_MANUAL_TEST_CHECKLIST.md)
+
 This repository currently contains the first implementation slice from the implementation plan:
 
 - Flutter package bootstrap files
@@ -12,12 +17,38 @@ This repository currently contains the first implementation slice from the imple
 
 ## Current status
 
-The Flutter SDK is not installed in this workspace, so the Android/iOS platform wrappers were not generated yet. Once Flutter is available, run the following from this directory to create the platform folders:
+This Flutter app now includes platform folders for:
+
+- Android
+- iOS
+- Windows
+
+Current target platforms for the project are:
+
+- Android
+- iOS
+- Windows 11
+
+The current Linux workspace can validate Dart and Flutter code with analysis and tests, but it cannot produce a Windows executable. Build the Windows desktop app on a Windows 11 machine.
+
+For Windows desktop build steps and a first-pass smoke test, use:
+
+- [Windows 11 build and smoke test](WINDOWS_11_BUILD_AND_SMOKE_TEST.md)
+
+Typical local validation from this directory:
 
 ```bash
-flutter create --platforms=android,ios .
+flutter doctor -v
+flutter analyze
+flutter test
+```
+
+Typical Windows 11 build commands:
+
+```powershell
 flutter pub get
-flutter run
+flutter run -d windows
+flutter build windows
 ```
 
 The current code is structured to match Phase 1 of the GungChat implementation plan and is ready for the next round of work on signaling, LAN discovery, and encrypted peer messaging.
