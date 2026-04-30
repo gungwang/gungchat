@@ -1,5 +1,5 @@
 #define MyAppName "GungChat"
-#define MyAppVersion "2.0.1"
+#define MyAppVersion "2.0.3"
 #define MyAppPublisher "GungChat"
 #define MyAppExeName "gungchat.exe"
 #define MyAppSourceDir "..\build\windows\x64\runner\Release"
@@ -9,6 +9,7 @@ AppId={{D8A0B1B8-83D4-4C38-9A7A-42D78B28D557}
 AppName={#MyAppName}
 AppVersion={#MyAppVersion}
 AppPublisher={#MyAppPublisher}
+VersionInfoVersion={#MyAppVersion}
 DefaultDirName={autopf}\{#MyAppName}
 DefaultGroupName={#MyAppName}
 UninstallDisplayIcon={app}\{#MyAppExeName}
