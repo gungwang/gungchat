@@ -19,7 +19,7 @@ Compression=lzma
 SolidCompression=yes
 WizardStyle=modern
 OutputDir=output
-OutputBaseFilename=gungchat-setup
+OutputBaseFilename=gungchat-setup-{#MyAppVersion}
 SetupIconFile=..\windows\runner\resources\app_icon.ico
 
 [Languages]
