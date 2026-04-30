@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/accessibility/a11y_helper.dart';
+import '../core/networking/signaling_service.dart';
 import '../features/chat/chat_screen.dart';
+import '../features/chat/lan_signaling_service.dart';
 import '../features/chat/pending_peer_input.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../models/contact.dart';
@@ -23,6 +25,7 @@ class AppShell extends ConsumerStatefulWidget {
 class _AppShellState extends ConsumerState<AppShell>
     with WidgetsBindingObserver {
   StreamSubscription<Uri>? _deepLinkSubscription;
+  StreamSubscription<LanReceivedSignal>? _lanSignalSubscription;
   bool _isAppLocked = false;
   bool _isUnlocking = false;
 
@@ -37,6 +40,7 @@ class _AppShellState extends ConsumerState<AppShell>
     }
     _deepLinkSubscription =
         ref.read(appLinksProvider).uriLinkStream.listen(_handleIncomingUri);
+    unawaited(_startLanSignaling());
   }
 
   @override
@@ -61,6 +65,7 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   void dispose() {
+    _lanSignalSubscription?.cancel();
     _deepLinkSubscription?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -78,6 +83,53 @@ class _AppShellState extends ConsumerState<AppShell>
       source: PeerInputSource.deepLink,
       receivedAt: DateTime.now(),
     );
+  }
+
+  Future<void> _startLanSignaling() async {
+    final service = ref.read(lanSignalingServiceProvider);
+    await service.ensureListening();
+    _lanSignalSubscription?.cancel();
+    _lanSignalSubscription = service.signals.listen(
+      (incomingSignal) {
+        unawaited(_handleIncomingLanSignal(incomingSignal));
+      },
+    );
+  }
+
+  Future<void> _handleIncomingLanSignal(LanReceivedSignal incomingSignal) async {
+    Contact? contact;
+
+    final payload = incomingSignal.senderContactPayload;
+    if (payload != null && payload.trim().isNotEmpty) {
+      try {
+        final exchangeService = ref.read(contactExchangeServiceProvider);
+        final card = exchangeService.decodeContactCard(payload);
+        contact = exchangeService.contactFromCard(card).copyWith(
+              lastSeenAt: DateTime.now(),
+            );
+        ref.read(contactBookProvider.notifier).addOrUpdate(contact);
+      } on FormatException {
+        contact = null;
+      }
+    }
+
+    final signalingEnvelope = ref
+        .read(manualSignalingServiceProvider)
+        .decode(incomingSignal.signal);
+    final shouldFocusChat = signalingEnvelope.type !=
+        SignalingEnvelopeType.iceCandidate;
+    if (contact != null) {
+      ref.read(selectedContactFingerprintProvider.notifier).state =
+          contact.fingerprint;
+      if (shouldFocusChat) {
+        ref.read(navigationIndexProvider.notifier).state = 0;
+      }
+    }
+
+    await ref.read(peerSessionControllerProvider.notifier).applyRemoteSignal(
+          incomingSignal.signal,
+          targetContact: contact ?? ref.read(selectedContactProvider),
+        );
   }
 
   Future<void> _ensureUnlocked({bool force = false}) async {

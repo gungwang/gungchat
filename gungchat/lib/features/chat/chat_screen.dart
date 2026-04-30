@@ -1420,6 +1420,102 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ? null
       : ref.watch(quickReplyMatchesProvider(quickReplyLookupPrefix));
     final conversationTitle = selectedContact?.displayName ?? 'Bootstrap';
+    final sessionSummary = canSendSecure
+        ? 'Secure channel open. Your encrypted conversation is live.'
+        : selectedContact == null
+            ? 'Select or import a contact from the Contacts tab to start a peer chat.'
+            : isSelectedContactBlocked
+                ? '${selectedContact.displayName} is blocked. Unblock them in Contacts before connecting.'
+                : 'Ready to connect to ${selectedContact.displayName}. Open Details for session and network diagnostics.';
+
+    Future<void> showSessionDetails() async {
+      await showModalBottomSheet<void>(
+        context: context,
+        isScrollControlled: true,
+        useSafeArea: true,
+        builder: (context) {
+          return FractionallySizedBox(
+            heightFactor: 0.92,
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 12, 16, 24),
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Connection Details',
+                        style: theme.textTheme.titleLarge,
+                      ),
+                    ),
+                    _StateChip(state: peerSession),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                _IdentityCard(identityAsync: identityAsync),
+                const SizedBox(height: 12),
+                _NetworkCard(networkAsync: networkAsync),
+                const SizedBox(height: 12),
+                _PeerSessionCard(
+                  sessionState: peerSession,
+                  selectedContact: selectedContact,
+                  isTargetBlocked: isSelectedContactBlocked,
+                  invitationDraft: invitationDraft,
+                  signalController: _signalController,
+                  onStartOffer: () async {
+                    await ref
+                        .read(peerSessionControllerProvider.notifier)
+                        .startOffer(targetContact: selectedContact);
+                  },
+                  onApplySignal: () async {
+                    await _applyImportedText(selectedContact);
+                  },
+                  onReset: () async {
+                    await ref
+                        .read(peerSessionControllerProvider.notifier)
+                        .resetSession();
+                    await ref.read(voiceMessageServiceProvider).cancelRecording();
+                    await ref.read(voiceMessageServiceProvider).stopPlayback();
+                    if (mounted) {
+                      _signalController.clear();
+                      _highlightClearTimer?.cancel();
+                      setState(() {
+                        _editingMessage = null;
+                        _replyingToMessage = null;
+                        _highlightedMessageId = null;
+                      });
+                    }
+                  },
+                  onConnect: selectedContact == null || isSelectedContactBlocked
+                      ? null
+                      : () async {
+                          ref
+                              .read(pendingPeerConnectIntentProvider.notifier)
+                              .state = PeerConnectIntent(
+                            fingerprint: selectedContact.fingerprint,
+                          );
+                        },
+                  onCopyInvitation: invitationDraft == null ||
+                          !invitationDraft.hasReadyBundle
+                      ? null
+                      : () => _copyInvitationDraft(
+                            invitationDraft,
+                            selectedContact,
+                          ),
+                  onCopyLink: invitationLink == null || invitationDraft == null
+                      ? null
+                      : () => _copyInvitationLink(
+                            invitationLink,
+                            invitationDraft,
+                          ),
+                  onPasteInvite: _pasteInviteFromClipboard,
+                  onHistoryAction: _handleHistoryAction,
+                ),
+              ],
+            ),
+          );
+        },
+      );
+    }
 
     return SafeArea(
       child: Padding(
@@ -1427,16 +1523,31 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('GungChat Bootstrap', style: theme.textTheme.headlineSmall),
+            Text(
+              selectedContact?.displayName ?? 'GungChat Chats',
+              style: theme.textTheme.headlineSmall,
+            ),
             const SizedBox(height: 8),
             Text(
-              'Invite import, deep links, saved contacts, and manual signaling now feed the same peer session flow.',
+              sessionSummary,
               style: theme.textTheme.bodyMedium,
             ),
             const SizedBox(height: 16),
-            _IdentityCard(identityAsync: identityAsync),
-            const SizedBox(height: 12),
-            _NetworkCard(networkAsync: networkAsync),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              children: [
+                _StateChip(state: peerSession),
+                if (selectedContact != null)
+                  Chip(label: Text('Target ${selectedContact.displayName}')),
+                FilledButton.tonalIcon(
+                  onPressed: showSessionDetails,
+                  icon: const Icon(Icons.tune_outlined),
+                  label: const Text('Details'),
+                ),
+              ],
+            ),
             const SizedBox(height: 12),
             _ContactTargetCard(
               contacts: savedContacts,
@@ -1475,63 +1586,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         fingerprint: selectedContact.fingerprint,
                       );
                     },
-            ),
-            const SizedBox(height: 12),
-            _PeerSessionCard(
-              sessionState: peerSession,
-              selectedContact: selectedContact,
-              isTargetBlocked: isSelectedContactBlocked,
-              invitationDraft: invitationDraft,
-              signalController: _signalController,
-              onStartOffer: () async {
-                await ref
-                    .read(peerSessionControllerProvider.notifier)
-                    .startOffer(targetContact: selectedContact);
-              },
-              onApplySignal: () async {
-                await _applyImportedText(selectedContact);
-              },
-              onReset: () async {
-                await ref
-                    .read(peerSessionControllerProvider.notifier)
-                    .resetSession();
-                await ref.read(voiceMessageServiceProvider).cancelRecording();
-                await ref.read(voiceMessageServiceProvider).stopPlayback();
-                if (mounted) {
-                  _signalController.clear();
-                  _highlightClearTimer?.cancel();
-                  setState(() {
-                    _editingMessage = null;
-                    _replyingToMessage = null;
-                    _highlightedMessageId = null;
-                  });
-                }
-              },
-              onConnect: selectedContact == null
-                  || isSelectedContactBlocked
-                  ? null
-                  : () async {
-                      ref
-                          .read(pendingPeerConnectIntentProvider.notifier)
-                          .state = PeerConnectIntent(
-                        fingerprint: selectedContact.fingerprint,
-                      );
-                    },
-              onCopyInvitation: invitationDraft == null ||
-                      !invitationDraft.hasReadyBundle
-                  ? null
-                  : () => _copyInvitationDraft(
-                        invitationDraft,
-                        selectedContact,
-                      ),
-              onCopyLink: invitationLink == null || invitationDraft == null
-                  ? null
-                  : () => _copyInvitationLink(
-                        invitationLink,
-                        invitationDraft,
-                      ),
-              onPasteInvite: _pasteInviteFromClipboard,
-              onHistoryAction: _handleHistoryAction,
             ),
             const SizedBox(height: 12),
             Expanded(
@@ -2058,12 +2112,15 @@ class _ContactTargetCard extends StatelessWidget {
                 'No saved contacts yet. Import or discover a peer from the Contacts tab.',
               )
             else
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  for (final contact in contacts)
-                    ChoiceChip(
+              SizedBox(
+                height: 40,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  itemCount: contacts.length,
+                  separatorBuilder: (_, __) => const SizedBox(width: 8),
+                  itemBuilder: (context, index) {
+                    final contact = contacts[index];
+                    return ChoiceChip(
                       label: Text(
                         blockedFingerprints.contains(contact.fingerprint)
                             ? '${contact.displayName} (blocked)'
@@ -2072,8 +2129,9 @@ class _ContactTargetCard extends StatelessWidget {
                       selected:
                           selectedContact?.fingerprint == contact.fingerprint,
                       onSelected: (_) => onSelectContact(contact.fingerprint),
-                    ),
-                ],
+                    );
+                  },
+                ),
               ),
             if (selectedContact != null) ...[
               const SizedBox(height: 12),

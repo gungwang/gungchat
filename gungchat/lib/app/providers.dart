@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../features/chat/chat_export_service.dart';
+import '../features/chat/adb_emulator_bridge_service.dart';
 import '../features/chat/attachment_message_service.dart';
 import '../core/encryption/crypto_service.dart';
 import '../core/encryption/key_manager.dart';
@@ -20,6 +21,7 @@ import '../features/chat/peer_invitation_builder.dart';
 import '../features/chat/peer_invitation_parser.dart';
 import '../features/chat/reaction_service.dart';
 import '../features/chat/custom_status_service.dart';
+import '../features/chat/lan_signaling_service.dart';
 import '../features/chat/message_service.dart';
 import '../features/chat/presence_status.dart';
 import '../features/chat/peer_session_controller.dart';
@@ -326,6 +328,23 @@ final appLockServiceProvider = Provider<AppLockService>((ref) {
   return AppLockService();
 });
 
+final contactExchangeServiceProvider = Provider<ContactExchangeService>((ref) {
+  return const ContactExchangeService();
+});
+
+final adbEmulatorBridgeServiceProvider = Provider<AdbEmulatorBridgeService>((ref) {
+  return AdbEmulatorBridgeService();
+});
+
+final lanSignalingServiceProvider = Provider<LanSignalingService>((ref) {
+  final service = LanSignalingService(
+    contactExchangeService: ref.watch(contactExchangeServiceProvider),
+    resolveTargetAddress: ref.watch(adbEmulatorBridgeServiceProvider).resolveTargetAddress,
+  );
+  ref.onDispose(service.dispose);
+  return service;
+});
+
 final peerSessionControllerProvider =
     StateNotifierProvider<PeerSessionController, PeerSessionState>((ref) {
   final controller = PeerSessionController(
@@ -340,6 +359,21 @@ final peerSessionControllerProvider =
     webRtcManager: ref.watch(webRtcManagerProvider),
     signalingService: ref.watch(manualSignalingServiceProvider),
     cryptoService: ref.watch(cryptoServiceProvider),
+    dispatchLocalSignal: ({
+      required encodedSignal,
+      required targetAddress,
+    }) async {
+      final identity = await ref.read(keyManagerProvider).getOrCreateIdentity();
+      await ref.read(lanSignalingServiceProvider).sendSignal(
+            encodedSignal: encodedSignal,
+            targetAddress: targetAddress,
+            identity: identity,
+            displayName:
+                ref.read(contactExchangeServiceProvider).defaultDisplayName(
+                      identity,
+                    ),
+          );
+    },
     isBlockedFingerprint: (fingerprint) {
       return ref.read(blockedContactsProvider).contains(fingerprint);
     },
@@ -358,10 +392,6 @@ final peerInvitationParserProvider = Provider<PeerInvitationParser>((ref) {
 
 final peerDeepLinkServiceProvider = Provider<PeerDeepLinkService>((ref) {
   return const PeerDeepLinkService();
-});
-
-final contactExchangeServiceProvider = Provider<ContactExchangeService>((ref) {
-  return const ContactExchangeService();
 });
 
 final contactBookStorageProvider = Provider<ContactBookStorage>((ref) {

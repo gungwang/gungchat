@@ -26,6 +26,10 @@ typedef LoadMessageService = Future<MessageService> Function();
 typedef LoadVoiceMessageService = VoiceMessageService Function();
 typedef LoadAttachmentMessageService = AttachmentMessageService Function();
 typedef RefreshConversationMessages = void Function(String conversationId);
+typedef DispatchLocalSignal = Future<void> Function({
+  required String encodedSignal,
+  required String targetAddress,
+});
 typedef IsBlockedFingerprint = bool Function(String fingerprint);
 
 enum PeerSessionRole {
@@ -222,6 +226,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     required WebRtcManager webRtcManager,
     required ManualSignalingService signalingService,
     required CryptoService cryptoService,
+    required DispatchLocalSignal dispatchLocalSignal,
     required IsBlockedFingerprint isBlockedFingerprint,
     Uuid? uuid,
   })  : _loadIdentity = loadIdentity,
@@ -233,6 +238,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         _webRtcManager = webRtcManager,
         _signalingService = signalingService,
         _cryptoService = cryptoService,
+        _dispatchLocalSignal = dispatchLocalSignal,
         _isBlockedFingerprint = isBlockedFingerprint,
         _uuid = uuid ?? const Uuid(),
         super(const PeerSessionState()) {
@@ -248,6 +254,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   final WebRtcManager _webRtcManager;
   final ManualSignalingService _signalingService;
   final CryptoService _cryptoService;
+  final DispatchLocalSignal _dispatchLocalSignal;
   final IsBlockedFingerprint _isBlockedFingerprint;
   final Uuid _uuid;
 
@@ -1107,6 +1114,8 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
 
   void _appendLocalSignal(SignalingEnvelope envelope) {
     final encodedSignal = _signalingService.encode(envelope);
+    final targetAddress = state.targetAddress;
+    final targetDisplayName = state.targetDisplayName;
     final signals = List<ShareableSignal>.from(state.localSignals)
       ..add(
         ShareableSignal(
@@ -1128,6 +1137,100 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         direction: PeerSessionHistoryDirection.outgoing,
       ),
     );
+
+    if (targetAddress != null && targetAddress.isNotEmpty) {
+      unawaited(
+        _dispatchLocalSignalIfPossible(
+          envelope: envelope,
+          encodedSignal: encodedSignal,
+          targetAddress: targetAddress,
+          targetDisplayName: targetDisplayName,
+        ),
+      );
+    }
+  }
+
+  Future<void> _dispatchLocalSignalIfPossible({
+    required SignalingEnvelope envelope,
+    required String encodedSignal,
+    required String targetAddress,
+    String? targetDisplayName,
+  }) async {
+    final destination = targetDisplayName ?? targetAddress;
+
+    try {
+      await _dispatchLocalSignal(
+        encodedSignal: encodedSignal,
+        targetAddress: targetAddress,
+      );
+      if (state.sessionId != envelope.sessionId) {
+        return;
+      }
+
+      switch (envelope.type) {
+        case SignalingEnvelopeType.offer:
+          state = state.copyWith(
+            lastEvent:
+                'Offer sent to $destination over LAN. Waiting for the answer.',
+            lastError: null,
+          );
+          _pushHistory(
+            title: 'Offer sent over LAN',
+            detail: 'Delivered directly to $destination.',
+            direction: PeerSessionHistoryDirection.outgoing,
+          );
+        case SignalingEnvelopeType.answer:
+          state = state.copyWith(
+            lastEvent:
+                'Answer sent to $destination over LAN. Waiting for the secure channel to finish connecting.',
+            lastError: null,
+          );
+          _pushHistory(
+            title: 'Answer sent over LAN',
+            detail: 'Delivered directly to $destination.',
+            direction: PeerSessionHistoryDirection.outgoing,
+          );
+        case SignalingEnvelopeType.iceCandidate:
+          break;
+      }
+    } catch (error) {
+      if (state.sessionId != envelope.sessionId) {
+        return;
+      }
+
+      if (envelope.type == SignalingEnvelopeType.iceCandidate) {
+        _pushHistory(
+          title: 'ICE delivery failed',
+          detail:
+              'Could not deliver ICE to $destination automatically: $error',
+          direction: PeerSessionHistoryDirection.system,
+        );
+        return;
+      }
+
+      final signalLabel = _signalTypeLabel(envelope.type);
+      state = state.copyWith(
+        lastError:
+            'Could not deliver the $signalLabel to $destination automatically. Copy it manually instead.',
+      );
+      _pushHistory(
+        title: 'LAN delivery failed',
+        detail:
+            'Could not deliver the $signalLabel to $destination automatically: $error',
+        direction: PeerSessionHistoryDirection.system,
+      );
+    }
+  }
+
+  String _signalTypeLabel(SignalingEnvelopeType type) {
+    switch (type) {
+      case SignalingEnvelopeType.offer:
+        return 'offer';
+      case SignalingEnvelopeType.answer:
+        return 'answer';
+      case SignalingEnvelopeType.iceCandidate:
+        return 'ICE payload';
+    }
   }
 
   Future<void> _handleInboundTransport(String rawMessage) async {
