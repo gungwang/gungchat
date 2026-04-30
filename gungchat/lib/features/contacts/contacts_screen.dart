@@ -98,10 +98,13 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     }
 
     _importController.text = scannedValue;
-    await _importContactPayload(openInChat: true);
+    await _importContactPayload(connect: true);
   }
 
-  Future<void> _importContactPayload({bool openInChat = false}) async {
+  Future<void> _importContactPayload({
+    bool openInChat = false,
+    bool connect = false,
+  }) async {
     final payload = _importController.text.trim();
     if (payload.isEmpty) {
       _showSnack('Paste a contact payload before importing it.');
@@ -115,10 +118,22 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           ref.read(contactExchangeServiceProvider).contactFromCard(contactCard);
       ref.read(contactBookProvider.notifier).addOrUpdate(contact);
       _importController.clear();
-      if (openInChat) {
+      if (connect && contact.lastKnownAddress != null) {
+        _startConnectFlow(contact.fingerprint);
+      } else if (openInChat || connect) {
         _openContactInChat(contact.fingerprint);
       }
-      _showSnack('Contact imported: ${contactCard.displayName}');
+      if (connect && contact.lastKnownAddress != null) {
+        _showSnack(
+          'Contact imported. Starting a LAN connection to ${contactCard.displayName}.',
+        );
+      } else if (connect) {
+        _showSnack(
+          'Contact imported, but no LAN address was included. Open the chat and use manual signaling.',
+        );
+      } else {
+        _showSnack('Contact imported: ${contactCard.displayName}');
+      }
     } catch (error) {
       _showSnack('Contact import failed: $error');
     }
@@ -188,12 +203,10 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   }
 
   String _resolvedDisplayName(DeviceIdentity identity) {
-    final value = _displayNameController.text.trim();
-    if (value.isNotEmpty) {
-      return value;
-    }
-
-    return 'GungChat ${identity.fingerprint.split(':').take(2).join()}';
+    return ref.read(contactExchangeServiceProvider).resolveDisplayName(
+          identity: identity,
+          preferredDisplayName: _displayNameController.text,
+        );
   }
 
   void _showSnack(String message) {
@@ -217,7 +230,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           Text('Discovery', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 8),
           const Text(
-            'Nearby LAN discovery, QR contact exchange, and direct handoff into chat are now wired together.',
+            'Nearby LAN discovery and QR contact exchange can hand off directly into the secure chat flow.',
           ),
           if (selectedContact != null) ...[
             const SizedBox(height: 16),
@@ -411,9 +424,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                       Expanded(
                         child: FilledButton.tonalIcon(
                           onPressed: () =>
-                              _importContactPayload(openInChat: true),
+                              _importContactPayload(connect: true),
                           icon: const Icon(Icons.chat_bubble_outline),
-                          label: const Text('Import To Chat'),
+                          label: const Text('Import & Connect'),
                         ),
                       ),
                     ],

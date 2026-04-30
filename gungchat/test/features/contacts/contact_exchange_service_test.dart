@@ -21,4 +21,18 @@ void main() {
     expect(decoded.port, 45454);
     expect(decoded.createdAt, DateTime(2026, 4, 23, 10, 0));
   });
+
+  test('prefers the most LAN-friendly address when importing a contact', () {
+    const service = ContactExchangeService();
+    final contact = service.contactFromCard(
+      const ContactCard(
+        displayName: 'Alice',
+        fingerprint: 'aa:bb:cc:dd',
+        addresses: <String>['172.22.112.1', '10.0.0.5', '192.168.1.22'],
+        port: 45454,
+      ),
+    );
+
+    expect(contact.lastKnownAddress, '192.168.1.22:45454');
+  });
 }

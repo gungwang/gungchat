@@ -7,3 +7,6 @@
 .pub/
 /build/
 /coverage/
+./gungchat/installer
+android/key.properties
+android/upload-keystore.jks

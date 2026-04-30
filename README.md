@@ -1,8 +1,6 @@
-==================================================================
 # NEED HELP TO DEBUG ISSUES | 需要协助调试问题
 ### Please clone this Repo and debug it to make it working.
 ### 请克隆这个仓库并进行调试，使其能够正常运行。
-==================================================================
 
 
 # GungChat Session 4 Handoff
@@ -458,7 +456,6 @@ If release Android builds are needed from Windows, ensure these are present loca
 
 Add the Inno Setup install folder to the user PATH so `ISCC.exe` works without a full path in future sessions.
 
-==================================================================
 
 # GungChat Session 3 Handoff
 
@@ -834,7 +831,6 @@ If you only need the shortest possible continuation brief:
 - The touched slices are currently validated by focused tests and narrow analyze
 - The next roadmap item is Custom Status Text
 
-==================================================================
 
 
 
@@ -1293,3 +1289,5 @@ Linux 文件系统在打包 Android 时几乎满了。
 `app-release.aab` 是 Google Play 用的 App Bundle，通常上传到 Google Play，由 Google Play 自动生成适配设备的 APK，用户不会直接安装 `.aab`。
 
 ---
+
+C:\AI\intel-ai\gungchat\gungchat\build\windows\x64\runner\Release
