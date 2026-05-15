@@ -138,7 +138,7 @@ class WebRtcManager {
   WebRtcSessionState _mapConnectionState(RTCPeerConnectionState state) {
     switch (state) {
       case RTCPeerConnectionState.RTCPeerConnectionStateConnected:
-        return WebRtcSessionState.open;
+        return WebRtcSessionState.connecting;
       case RTCPeerConnectionState.RTCPeerConnectionStateConnecting:
         return WebRtcSessionState.connecting;
       case RTCPeerConnectionState.RTCPeerConnectionStateDisconnected:
