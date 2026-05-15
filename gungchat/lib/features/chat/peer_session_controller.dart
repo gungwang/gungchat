@@ -270,6 +270,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   bool _localTypingActive = false;
   PeerPresenceStatus? _lastSentPresenceStatus;
   String? _lastSentCustomStatusText;
+  bool _automaticHelloSent = false;
 
   Future<void> startOffer({Contact? targetContact}) async {
     if (targetContact != null && _isBlockedFingerprint(targetContact.fingerprint)) {
@@ -1037,6 +1038,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     _sharedSecret = null;
     _peerConnectionReady = false;
     _hasRemoteDescription = false;
+    _automaticHelloSent = false;
     _pendingRemoteIceCandidates.clear();
 
     await _webRtcManager.close();
@@ -1447,6 +1449,27 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     }
 
     state = nextState;
+
+    if (connectionState == WebRtcSessionState.open) {
+      unawaited(_sendAutomaticHelloIfNeeded());
+    }
+  }
+
+  Future<void> _sendAutomaticHelloIfNeeded() async {
+    if (_automaticHelloSent ||
+        state.role != PeerSessionRole.initiator ||
+        !state.isTransportReady) {
+      return;
+    }
+
+    _automaticHelloSent = true;
+    final sent = await sendMessage(
+      body: 'hello',
+      burnAfterRead: false,
+    );
+    if (!sent) {
+      _automaticHelloSent = false;
+    }
   }
 
   void _pushHistory({
