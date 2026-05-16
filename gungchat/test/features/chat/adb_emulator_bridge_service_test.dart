@@ -4,7 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:gungchat/features/chat/adb_emulator_bridge_service.dart';
 
 void main() {
-  test('bridges emulator guest targets through adb forward and reverse', () async {
+  test('bridges emulator guest targets through adb forward only', () async {
     final commands = <String>[];
     final service = AdbEmulatorBridgeService(
       enabled: true,
@@ -33,10 +33,7 @@ void main() {
 
     expect(resolvedTarget, '127.0.0.1:45455');
     expect(commands, contains('adb.exe devices'));
-    expect(
-      commands,
-      contains('adb.exe -s emulator-5554 reverse tcp:45454 tcp:45454'),
-    );
+    expect(commands.where((command) => command.contains(' reverse ')), isEmpty);
     expect(
       commands,
       contains('adb.exe -s emulator-5554 forward tcp:45455 tcp:45454'),
