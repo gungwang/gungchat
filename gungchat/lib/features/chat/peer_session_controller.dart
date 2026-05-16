@@ -1356,9 +1356,9 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
               audioFilePath: await _loadVoiceMessageService().saveInboundClipBytes(
                 bytes: voicePayload.bytes,
                 messageId: messageId,
-                extension: voicePayload.mimeType.endsWith('ogg')
-                    ? '.ogg'
-                    : '.audio',
+                extension: VoiceMessageService.extensionForMimeType(
+                  voicePayload.mimeType,
+                ),
               ),
               audioDurationMs: voicePayload.durationMs,
             );

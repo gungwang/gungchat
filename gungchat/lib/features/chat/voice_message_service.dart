@@ -19,6 +19,18 @@ class RecordedVoiceClip {
   final String mimeType;
 }
 
+class VoiceRecordingProfile {
+  const VoiceRecordingProfile({
+    required this.config,
+    required this.extension,
+    required this.mimeType,
+  });
+
+  final RecordConfig config;
+  final String extension;
+  final String mimeType;
+}
+
 class VoiceMessageService extends ChangeNotifier {
   VoiceMessageService({
     AudioRecorder? recorder,
@@ -32,12 +44,34 @@ class VoiceMessageService extends ChangeNotifier {
   }
 
   static const int maxDurationSeconds = 120;
-  static const String defaultMimeType = 'audio/ogg';
+  static const String defaultMimeType = 'audio/mp4';
+  static const VoiceRecordingProfile _aacLcRecordingProfile =
+      VoiceRecordingProfile(
+        config: RecordConfig(
+          encoder: AudioEncoder.aacLc,
+          bitRate: 32000,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        extension: '.m4a',
+        mimeType: defaultMimeType,
+      );
+  static const VoiceRecordingProfile _wavRecordingProfile =
+      VoiceRecordingProfile(
+        config: RecordConfig(
+          encoder: AudioEncoder.wav,
+          sampleRate: 16000,
+          numChannels: 1,
+        ),
+        extension: '.wav',
+        mimeType: 'audio/wav',
+      );
 
   final AudioRecorder _recorder;
   final AudioPlayer _player;
 
   StreamSubscription<void>? _playerCompleteSubscription;
+  VoiceRecordingProfile? _activeRecordingProfile;
   DateTime? _recordingStartedAt;
   String? _recordingPath;
   String? _playingMessageId;
@@ -45,6 +79,40 @@ class VoiceMessageService extends ChangeNotifier {
 
   bool get isRecording => _isRecording;
   String? get playingMessageId => _playingMessageId;
+
+  @visibleForTesting
+  static VoiceRecordingProfile selectRecordingProfile({
+    required bool aacLcSupported,
+    required bool wavSupported,
+  }) {
+    if (aacLcSupported) {
+      return _aacLcRecordingProfile;
+    }
+    if (wavSupported) {
+      return _wavRecordingProfile;
+    }
+
+    throw StateError('No supported voice recording encoder available.');
+  }
+
+  static String extensionForMimeType(String mimeType) {
+    final normalizedMimeType = mimeType.toLowerCase();
+    if (normalizedMimeType.contains('ogg')) {
+      return '.ogg';
+    }
+    if (normalizedMimeType.contains('wav')) {
+      return '.wav';
+    }
+    if (normalizedMimeType.contains('aac')) {
+      return '.aac';
+    }
+    if (normalizedMimeType.contains('mp4') ||
+        normalizedMimeType.contains('m4a')) {
+      return '.m4a';
+    }
+
+    return '.audio';
+  }
 
   Future<bool> startRecording() async {
     if (_isRecording) {
@@ -54,20 +122,26 @@ class VoiceMessageService extends ChangeNotifier {
       return false;
     }
 
-    final outputPath = await _nextClipPath(prefix: 'recording');
-    await _recorder.start(
-      const RecordConfig(
-        encoder: AudioEncoder.opus,
-        bitRate: 32000,
-        sampleRate: 16000,
-      ),
-      path: outputPath,
-    );
-    _recordingStartedAt = DateTime.now();
-    _recordingPath = outputPath;
-    _isRecording = true;
-    notifyListeners();
-    return true;
+    try {
+      final profile = await _resolveRecordingProfile();
+      final outputPath = await _nextClipPath(
+        prefix: 'recording',
+        extension: profile.extension,
+      );
+      await _recorder.start(profile.config, path: outputPath);
+      _activeRecordingProfile = profile;
+      _recordingStartedAt = DateTime.now();
+      _recordingPath = outputPath;
+      _isRecording = true;
+      notifyListeners();
+      return true;
+    } on Exception {
+      _activeRecordingProfile = null;
+      _recordingStartedAt = null;
+      _recordingPath = null;
+      _isRecording = false;
+      return false;
+    }
   }
 
   Future<RecordedVoiceClip?> stopRecording() async {
@@ -75,8 +149,10 @@ class VoiceMessageService extends ChangeNotifier {
       return null;
     }
 
+    final activeProfile = _activeRecordingProfile;
     final startedAt = _recordingStartedAt;
     final outputPath = await _recorder.stop() ?? _recordingPath;
+    _activeRecordingProfile = null;
     _recordingStartedAt = null;
     _recordingPath = null;
     _isRecording = false;
@@ -91,7 +167,7 @@ class VoiceMessageService extends ChangeNotifier {
     return RecordedVoiceClip(
       filePath: outputPath,
       durationMs: durationMs,
-      mimeType: defaultMimeType,
+      mimeType: activeProfile?.mimeType ?? defaultMimeType,
     );
   }
 
@@ -102,6 +178,7 @@ class VoiceMessageService extends ChangeNotifier {
 
     final outputPath = _recordingPath;
     await _recorder.cancel();
+  _activeRecordingProfile = null;
     _recordingStartedAt = null;
     _recordingPath = null;
     _isRecording = false;
@@ -142,7 +219,7 @@ class VoiceMessageService extends ChangeNotifier {
   Future<String> saveInboundClipBytes({
     required Uint8List bytes,
     required String messageId,
-    String extension = '.ogg',
+    String extension = '.m4a',
   }) async {
     final clipPath = await _nextClipPath(
       prefix: 'voice-$messageId',
@@ -161,9 +238,23 @@ class VoiceMessageService extends ChangeNotifier {
     super.dispose();
   }
 
+  Future<VoiceRecordingProfile> _resolveRecordingProfile() async {
+    final aacLcSupported = await _recorder.isEncoderSupported(
+      _aacLcRecordingProfile.config.encoder,
+    );
+    final wavSupported = await _recorder.isEncoderSupported(
+      _wavRecordingProfile.config.encoder,
+    );
+
+    return selectRecordingProfile(
+      aacLcSupported: aacLcSupported,
+      wavSupported: wavSupported,
+    );
+  }
+
   Future<String> _nextClipPath({
     required String prefix,
-    String extension = '.ogg',
+    String extension = '.m4a',
   }) async {
     final directory = await getApplicationSupportDirectory();
     final clipsDirectory = Directory(

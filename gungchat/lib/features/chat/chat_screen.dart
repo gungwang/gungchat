@@ -1051,7 +1051,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
           content: Text(
-            'Microphone access is required to record voice messages.',
+            'Could not access the microphone. Check app permissions and device microphone settings.',
           ),
         ),
       );
