@@ -2012,9 +2012,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                 ),
               ),
             ],
-          );
-      ),
-    );
+          ),
+        );
   }
 
   Widget _buildMessage(
@@ -2064,109 +2063,6 @@ enum _ChatAttachmentAction {
   files,
   location,
   contact,
-}
-
-class _ContactTargetCard extends StatelessWidget {
-  const _ContactTargetCard({
-    required this.contacts,
-    required this.selectedContact,
-    required this.blockedFingerprints,
-    required this.isSelectedContactBlocked,
-    required this.onSelectContact,
-    required this.onClearSelection,
-    required this.onConnect,
-    this.selectedUri,
-    this.onCopyUri,
-  });
-
-  final List<Contact> contacts;
-  final Contact? selectedContact;
-  final Set<String> blockedFingerprints;
-  final bool isSelectedContactBlocked;
-  final ValueChanged<String> onSelectContact;
-  final VoidCallback onClearSelection;
-  final VoidCallback? onConnect;
-  final String? selectedUri;
-  final VoidCallback? onCopyUri;
-
-  @override
-  Widget build(BuildContext context) {
-    return Card(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('Chat Target', style: Theme.of(context).textTheme.titleMedium),
-            const SizedBox(height: 12),
-            if (contacts.isEmpty)
-              const Text(
-                'No saved contacts yet. Import or discover a peer from the Contacts tab.',
-              )
-            else
-              SizedBox(
-                height: 40,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  itemCount: contacts.length,
-                  separatorBuilder: (_, __) => const SizedBox(width: 8),
-                  itemBuilder: (context, index) {
-                    final contact = contacts[index];
-                    return ChoiceChip(
-                      label: Text(
-                        blockedFingerprints.contains(contact.fingerprint)
-                            ? '${contact.displayName} (blocked)'
-                            : contact.displayName,
-                      ),
-                      selected:
-                          selectedContact?.fingerprint == contact.fingerprint,
-                      onSelected: (_) => onSelectContact(contact.fingerprint),
-                    );
-                  },
-                ),
-              ),
-            if (selectedContact != null) ...[
-              const SizedBox(height: 12),
-              Text(selectedContact!.fingerprint),
-              if (isSelectedContactBlocked) ...[
-                const SizedBox(height: 4),
-                const Chip(label: Text('Blocked')),
-              ],
-              if (selectedContact!.lastKnownAddress != null) ...[
-                const SizedBox(height: 4),
-                Text(selectedContact!.lastKnownAddress!),
-              ],
-              const SizedBox(height: 12),
-              Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  if (onCopyUri != null && selectedUri != null)
-                    FilledButton.tonalIcon(
-                      onPressed: onCopyUri,
-                      icon: const Icon(Icons.link_outlined),
-                      label: const Text('Copy URI'),
-                    ),
-                  FilledButton.tonalIcon(
-                    onPressed: onClearSelection,
-                    icon: const Icon(Icons.clear_outlined),
-                    label: const Text('Clear'),
-                  ),
-                  FilledButton.icon(
-                    onPressed: onConnect,
-                    icon: const Icon(Icons.wifi_tethering_outlined),
-                    label: Text(
-                      isSelectedContactBlocked ? 'Blocked' : 'Connect',
-                    ),
-                  ),
-                ],
-              ),
-            ],
-          ],
-        ),
-      ),
-    );
-  }
 }
 
 class _PeerSessionCard extends StatelessWidget {

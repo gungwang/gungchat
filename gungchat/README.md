@@ -1,4 +1,4 @@
-# GungChat
+# GungChat， (敢说) 目前最完全的点对点加密通讯应用程序：100%保密、完全隐私、无用户数据泄露、无登录、无服务器依赖、点对点、完全匿名、数据加密、无广告、无追踪、完全自主控制、短信、语音通话、视频通话、开源免费。GungChat puts privacy first. This open‑source P2P messenger encrypts every text, call, and video—without accounts or servers. No tracking, no ads, just secure communication with total freedom.
 
 GungChat is a privacy-first peer-to-peer messenger for Flutter.
 

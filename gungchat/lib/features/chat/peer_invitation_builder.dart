@@ -1,4 +1,5 @@
 import '../../core/networking/signaling_service.dart';
+import '../../core/networking/webrtc_manager.dart';
 import '../../models/contact.dart';
 import 'peer_session_controller.dart';
 
@@ -43,13 +44,14 @@ class PeerInvitationBuilder {
     final isTargetingContact = sessionState.expectedRemoteFingerprint == null
         ? sessionState.remoteFingerprint == contact.fingerprint
         : sessionState.expectedRemoteFingerprint == contact.fingerprint;
-    final offerSignal = isTargetingContact
+    final isStaleSession = _isStaleSession(sessionState);
+    final offerSignal = isTargetingContact && !isStaleSession
         ? _latestSignal(sessionState, SignalingEnvelopeType.offer)
         : null;
-    final answerSignal = isTargetingContact
+    final answerSignal = isTargetingContact && !isStaleSession
         ? _latestSignal(sessionState, SignalingEnvelopeType.answer)
         : null;
-    final iceSignals = isTargetingContact
+    final iceSignals = isTargetingContact && !isStaleSession
         ? _signals(sessionState, SignalingEnvelopeType.iceCandidate)
         : const <String>[];
 
@@ -114,6 +116,16 @@ class PeerInvitationBuilder {
       ),
       manualUri: manualUri,
     );
+  }
+
+  bool _isStaleSession(PeerSessionState sessionState) {
+    return switch (sessionState.connectionState) {
+      WebRtcSessionState.disconnected ||
+      WebRtcSessionState.failed ||
+      WebRtcSessionState.closed =>
+        true,
+      _ => false,
+    };
   }
 
   String? _latestSignal(
