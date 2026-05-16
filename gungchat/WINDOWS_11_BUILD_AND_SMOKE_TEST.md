@@ -12,12 +12,13 @@ This guide covers:
 
 - local Windows 11 build prerequisites
 - building the desktop app
+- packaging an unsigned Windows installer with Inno Setup
 - running a short smoke test pass
 
 This guide does not cover:
 
 - code signing
-- MSI or installer packaging
+- MSI packaging
 - store distribution
 - Android or iOS release workflows
 
@@ -27,6 +28,7 @@ This guide does not cover:
 - Flutter SDK installed and on `PATH`
 - Visual Studio with Windows desktop C++ build tools installed
 - Git available in a terminal
+- Inno Setup 6 installed if you want to generate the Windows installer
 
 Before building, confirm Flutter can see the Windows toolchain:
 
@@ -74,6 +76,33 @@ Expected output location:
 The main executable is typically:
 
 - `build\windows\x64\runner\Release\gungchat.exe`
+
+## Build A Release Installer
+
+Use this when you want the script to sync the installer version from `pubspec.yaml`,
+build the Windows release output, and compile the installer in one step:
+
+```powershell
+.\build-windows-installer.ps1
+```
+
+If you want to preview the steps without running them:
+
+```powershell
+.\build-windows-installer.ps1 -WhatIf
+```
+
+What the script does:
+
+- reads the app version from `pubspec.yaml`
+- syncs `installer\gungchat.iss` to that version
+- runs `flutter pub get`
+- runs `flutter build windows`
+- compiles the installer with Inno Setup
+
+Expected installer output:
+
+- `installer\output\gungchat-setup-<version>.exe`
 
 ## Windows-Specific Notes
 
