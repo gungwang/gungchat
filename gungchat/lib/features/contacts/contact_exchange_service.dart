@@ -131,7 +131,10 @@ class ContactExchangeService {
     return ContactCard.fromJson(jsonDecode(decoded) as Map<String, dynamic>);
   }
 
-  Contact contactFromCard(ContactCard card) {
+  Contact contactFromCard(
+    ContactCard card, {
+    ContactTrustLevel trustLevel = ContactTrustLevel.unknown,
+  }) {
     final preferredAddress = selectPreferredAddress(card.addresses);
     return Contact(
       id: card.fingerprint,
@@ -140,7 +143,7 @@ class ContactExchangeService {
       lastKnownAddress:
           preferredAddress == null ? null : '$preferredAddress:${card.port}',
       lastSeenAt: card.createdAt ?? DateTime.now(),
-      trustLevel: ContactTrustLevel.unknown,
+      trustLevel: trustLevel,
     );
   }
 

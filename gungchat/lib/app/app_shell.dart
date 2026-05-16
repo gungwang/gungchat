@@ -105,7 +105,10 @@ class _AppShellState extends ConsumerState<AppShell>
       try {
         final exchangeService = ref.read(contactExchangeServiceProvider);
         final card = exchangeService.decodeContactCard(payload);
-        contact = exchangeService.contactFromCard(card).copyWith(
+        contact = exchangeService.contactFromCard(
+          card,
+          trustLevel: ContactTrustLevel.verified,
+        ).copyWith(
               lastSeenAt: DateTime.now(),
             );
         ref.read(contactBookProvider.notifier).addOrUpdate(contact);

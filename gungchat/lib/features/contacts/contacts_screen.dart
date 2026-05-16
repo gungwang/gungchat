@@ -2,7 +2,6 @@ import 'dart:async';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
@@ -26,10 +25,6 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   final TextEditingController _displayNameController = TextEditingController(
     text: 'GungChat',
   );
-  final TextEditingController _importController = TextEditingController();
-
-  bool _discovering = false;
-  List<DiscoveryCandidate> _nearbyPeers = const [];
 
   bool get _supportsQrScanning {
     if (kIsWeb) {
@@ -44,46 +39,14 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   @override
   void dispose() {
     _displayNameController.dispose();
-    _importController.dispose();
     super.dispose();
-  }
-
-  Future<void> _refreshLanPeers() async {
-    if (_discovering) {
-      return;
-    }
-
-    setState(() {
-      _discovering = true;
-    });
-
-    try {
-      final identity = await ref.read(deviceIdentityProvider.future);
-      final peers = await ref.read(discoveryServiceProvider).discoverLanPeers(
-            identity: identity,
-            displayName: _resolvedDisplayName(identity),
-          );
-      if (mounted) {
-        setState(() {
-          _nearbyPeers = peers;
-        });
-      }
-    } catch (error) {
-      if (mounted) {
-        _showSnack('LAN discovery failed: $error');
-      }
-    } finally {
-      if (mounted) {
-        setState(() {
-          _discovering = false;
-        });
-      }
-    }
   }
 
   Future<void> _scanContactPayload() async {
     if (!_supportsQrScanning) {
-      _showSnack('QR scanning is not available on Windows. Paste the contact payload instead.');
+      _showSnack(
+        'QR scanning is not available on Windows. Use another GungChat device with a camera to scan this code.',
+      );
       return;
     }
 
@@ -97,85 +60,47 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       return;
     }
 
-    _importController.text = scannedValue;
-    await _importContactPayload(connect: true);
+    await _connectFromPayload(scannedValue, trustImmediately: true);
   }
 
-  Future<void> _importContactPayload({
-    bool openInChat = false,
-    bool connect = false,
+  Future<void> _connectFromPayload(
+    String payload, {
+    bool trustImmediately = false,
   }) async {
-    final payload = _importController.text.trim();
-    if (payload.isEmpty) {
-      _showSnack('Paste a contact payload before importing it.');
+    final normalizedPayload = payload.trim();
+    if (normalizedPayload.isEmpty) {
+      _showSnack('Scan a GungChat QR code before trying to connect.');
       return;
     }
 
     try {
+      final exchangeService = ref.read(contactExchangeServiceProvider);
       final contactCard =
-          ref.read(contactExchangeServiceProvider).decodeContactCard(payload);
-      final contact =
-          ref.read(contactExchangeServiceProvider).contactFromCard(contactCard);
+          exchangeService.decodeContactCard(normalizedPayload);
+      final contact = exchangeService.contactFromCard(
+        contactCard,
+        trustLevel: trustImmediately
+            ? ContactTrustLevel.verified
+            : ContactTrustLevel.unknown,
+      );
       ref.read(contactBookProvider.notifier).addOrUpdate(contact);
-      _importController.clear();
-      if (connect && contact.lastKnownAddress != null) {
-        _startConnectFlow(contact.fingerprint);
-      } else if (openInChat || connect) {
-        _openContactInChat(contact.fingerprint);
-      }
-      if (connect && contact.lastKnownAddress != null) {
-        _showSnack(
-          'Contact imported. Starting a LAN connection to ${contactCard.displayName}.',
-        );
-      } else if (connect) {
-        _showSnack(
-          'Contact imported, but no LAN address was included. Open the chat and use manual signaling.',
-        );
-      } else {
-        _showSnack('Contact imported: ${contactCard.displayName}');
-      }
-    } catch (error) {
-      _showSnack('Contact import failed: $error');
-    }
-  }
 
-  Future<void> _saveDiscoveredPeer(
-    DiscoveryCandidate candidate, {
-    bool openInChat = false,
-    bool connect = false,
-  }) async {
-    final contact = _contactFromDiscoveryCandidate(candidate);
+      if (contact.lastKnownAddress == null) {
+        _showSnack(
+          'This QR code does not include a usable LAN address yet. Open the QR page on the other device again and rescan it.',
+        );
+        return;
+      }
 
-    ref.read(contactBookProvider.notifier).addOrUpdate(contact);
-    if (connect) {
       _startConnectFlow(contact.fingerprint);
-    } else if (openInChat) {
-      _openContactInChat(contact.fingerprint);
+      _showSnack(
+        trustImmediately
+            ? 'Trusted ${contactCard.displayName}. Connecting automatically over LAN.'
+            : 'Connecting automatically to ${contactCard.displayName}.',
+      );
+    } catch (error) {
+      _showSnack('QR connection failed: $error');
     }
-    _showSnack('Saved ${candidate.displayName}');
-  }
-
-  Contact _contactFromDiscoveryCandidate(DiscoveryCandidate candidate) {
-    final exchangeService = ref.read(contactExchangeServiceProvider);
-
-    if (candidate.contactPayload != null) {
-      final contactCard =
-          exchangeService.decodeContactCard(candidate.contactPayload!);
-      return exchangeService.contactFromCard(contactCard).copyWith(
-            lastKnownAddress: '${candidate.host}:${candidate.port}',
-            lastSeenAt: DateTime.now(),
-            isLanDiscovered: true,
-          );
-    }
-
-    return Contact(
-      id: candidate.fingerprint ?? '${candidate.host}:${candidate.port}',
-      displayName: candidate.displayName,
-      fingerprint: candidate.fingerprint ?? 'unknown',
-      lastKnownAddress: '${candidate.host}:${candidate.port}',
-      lastSeenAt: DateTime.now(),
-      isLanDiscovered: true,
-    );
   }
 
   void _openContactInChat(String fingerprint) {
@@ -193,13 +118,6 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     ref.read(pendingPeerConnectIntentProvider.notifier).state =
         PeerConnectIntent(fingerprint: fingerprint);
     ref.read(navigationIndexProvider.notifier).state = 0;
-  }
-
-  Future<void> _copyText(String label, String value) async {
-    await Clipboard.setData(ClipboardData(text: value));
-    if (mounted) {
-      _showSnack('$label copied');
-    }
   }
 
   String _resolvedDisplayName(DeviceIdentity identity) {
@@ -230,7 +148,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           Text('Discovery', style: theme.textTheme.headlineSmall),
           const SizedBox(height: 8),
           const Text(
-            'Nearby LAN discovery and QR contact exchange can hand off directly into the secure chat flow.',
+            'Scan once to establish trust. After the first QR exchange, both devices can reconnect with one tap.',
           ),
           if (selectedContact != null) ...[
             const SizedBox(height: 16),
@@ -260,8 +178,12 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Shareable Identity',
+                    'Your Connect QR',
                     style: theme.textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 4),
+                  const Text(
+                    'Open this page on the other device and scan this QR code. GungChat will exchange identities and connect automatically over LAN.',
                   ),
                   const SizedBox(height: 12),
                   TextField(
@@ -335,33 +257,17 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                                 ),
                               ),
                               const SizedBox(height: 16),
-                              SelectableText(
-                                payload,
-                                style: theme.textTheme.bodySmall,
-                              ),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: FilledButton.icon(
-                                      onPressed: () =>
-                                          _copyText('Contact payload', payload),
-                                      icon: const Icon(Icons.copy_all_outlined),
-                                      label: const Text('Copy QR Payload'),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 12),
-                                  Expanded(
-                                    child: FilledButton.tonalIcon(
-                                      onPressed: () => _copyText(
-                                        'Fingerprint',
-                                        card.fingerprint,
-                                      ),
-                                      icon: const Icon(Icons.badge_outlined),
-                                      label: const Text('Copy Fingerprint'),
-                                    ),
-                                  ),
-                                ],
+                              Container(
+                                width: double.infinity,
+                                padding: const EdgeInsets.all(12),
+                                decoration: BoxDecoration(
+                                  color: theme.colorScheme.surfaceContainerHighest,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  'Keep this QR visible until the other device finishes scanning and starts connecting.',
+                                  style: theme.textTheme.bodyMedium,
+                                ),
                               ),
                             ],
                           );
@@ -383,132 +289,26 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Import Contact',
-                          style: theme.textTheme.titleMedium,
-                        ),
-                      ),
-                      if (_supportsQrScanning)
-                        IconButton(
-                          tooltip: 'Scan contact QR',
-                          onPressed: _scanContactPayload,
-                          icon: const Icon(Icons.qr_code_scanner),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _importController,
-                    maxLines: 4,
-                    minLines: 2,
-                    decoration: const InputDecoration(
-                      labelText: 'Paste contact payload',
-                      hintText: 'gungchat-contact:...',
-                      border: OutlineInputBorder(),
-                    ),
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: FilledButton.icon(
-                          onPressed: _importContactPayload,
-                          icon: const Icon(Icons.download_outlined),
-                          label: const Text('Import Contact'),
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: FilledButton.tonalIcon(
-                          onPressed: () =>
-                              _importContactPayload(connect: true),
-                          icon: const Icon(Icons.chat_bubble_outline),
-                          label: const Text('Import & Connect'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 12),
-          Card(
-            child: Padding(
-              padding: const EdgeInsets.all(16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Expanded(
-                        child: Text(
-                          'Nearby Peers',
-                          style: theme.textTheme.titleMedium,
-                        ),
-                      ),
-                      IconButton(
-                        tooltip: 'Refresh LAN discovery',
-                        onPressed: _discovering ? null : _refreshLanPeers,
-                        icon: _discovering
-                            ? const SizedBox(
-                                width: 18,
-                                height: 18,
-                                child:
-                                    CircularProgressIndicator(strokeWidth: 2),
-                              )
-                            : const Icon(Icons.refresh),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
                   Text(
-                    _discovering
-                        ? 'Broadcasting a LAN probe and listening for nearby GungChat peers...'
-                        : 'Tap refresh while both peers have Discovery open on the same network.',
+                    'Scan Peer QR',
+                    style: theme.textTheme.titleMedium,
                   ),
-                  const SizedBox(height: 12),
-                  if (_nearbyPeers.isEmpty)
-                    const Text(
-                      'No nearby peers discovered in this session yet.',
-                    )
-                  else
-                    Column(
-                      children: [
-                        for (final peer in _nearbyPeers) ...[
-                          _DiscoveryPeerTile(
-                            candidate: peer,
-                            onSave: () => _saveDiscoveredPeer(peer),
-                            onOpenInChat: () =>
-                                _saveDiscoveredPeer(peer, openInChat: true),
-                            onConnect: () =>
-                                _saveDiscoveredPeer(peer, connect: true),
-                            onCopyUri: () => _copyText(
-                              'Manual URI',
-                              ref
-                                  .read(discoveryServiceProvider)
-                                  .buildManualConnectionUri(
-                                    host: peer.host,
-                                    port: peer.port,
-                                    fingerprint: peer.fingerprint,
-                                  )
-                                  .toString(),
-                            ),
-                            onCopyPayload: peer.contactPayload == null
-                                ? null
-                                : () => _copyText(
-                                      'Contact payload',
-                                      peer.contactPayload!,
-                                    ),
-                          ),
-                          if (peer != _nearbyPeers.last)
-                            const Divider(height: 24),
-                        ],
-                      ],
+                  const SizedBox(height: 4),
+                  Text(
+                    _supportsQrScanning
+                        ? 'Use this device camera to scan the other GungChat QR code. The first scan creates a trusted connection automatically.'
+                        : 'This device cannot scan QR codes. Use another GungChat device with a camera to scan this QR code and complete the first trust exchange.',
+                  ),
+                  const SizedBox(height: 16),
+                  FilledButton.icon(
+                    onPressed: _supportsQrScanning ? _scanContactPayload : null,
+                    icon: const Icon(Icons.qr_code_scanner),
+                    label: Text(
+                      _supportsQrScanning
+                          ? 'Scan QR and Connect'
+                          : 'Scan on Another Device',
                     ),
+                  ),
                 ],
               ),
             ),
@@ -527,7 +327,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                   const SizedBox(height: 12),
                   if (savedContacts.isEmpty)
                     const Text(
-                      'Imported or saved LAN contacts will appear here.',
+                      'Trusted devices appear here after the first QR scan.',
                     )
                   else
                     Column(
@@ -586,74 +386,6 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _DiscoveryPeerTile extends StatelessWidget {
-  const _DiscoveryPeerTile({
-    required this.candidate,
-    required this.onSave,
-    required this.onOpenInChat,
-    required this.onConnect,
-    required this.onCopyUri,
-    this.onCopyPayload,
-  });
-
-  final DiscoveryCandidate candidate;
-  final VoidCallback onSave;
-  final VoidCallback onOpenInChat;
-  final VoidCallback onConnect;
-  final VoidCallback onCopyUri;
-  final VoidCallback? onCopyPayload;
-
-  @override
-  Widget build(BuildContext context) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(candidate.displayName,
-            style: Theme.of(context).textTheme.titleSmall),
-        const SizedBox(height: 4),
-        Text('${candidate.host}:${candidate.port}'),
-        if (candidate.fingerprint != null) ...[
-          const SizedBox(height: 4),
-          Text(candidate.fingerprint!),
-        ],
-        const SizedBox(height: 12),
-        Wrap(
-          spacing: 8,
-          runSpacing: 8,
-          children: [
-            FilledButton.tonalIcon(
-              onPressed: onCopyUri,
-              icon: const Icon(Icons.link_outlined),
-              label: const Text('Copy URI'),
-            ),
-            if (onCopyPayload != null)
-              FilledButton.tonalIcon(
-                onPressed: onCopyPayload,
-                icon: const Icon(Icons.qr_code_2_outlined),
-                label: const Text('Copy Payload'),
-              ),
-            FilledButton.tonalIcon(
-              onPressed: onSave,
-              icon: const Icon(Icons.person_add_alt_1_outlined),
-              label: const Text('Save'),
-            ),
-            FilledButton.icon(
-              onPressed: onOpenInChat,
-              icon: const Icon(Icons.chat_bubble_outline),
-              label: const Text('Open In Chat'),
-            ),
-            FilledButton.icon(
-              onPressed: onConnect,
-              icon: const Icon(Icons.wifi_tethering_outlined),
-              label: const Text('Connect'),
-            ),
-          ],
-        ),
-      ],
     );
   }
 }
@@ -1053,6 +785,10 @@ class _SavedContactTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isTrusted = contact.trustLevel == ContactTrustLevel.verified;
+    final canConnect =
+        !isBlocked && isTrusted && contact.lastKnownAddress != null;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -1064,6 +800,7 @@ class _SavedContactTile extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleSmall,
               ),
             ),
+            if (isTrusted) const Chip(label: Text('Trusted')),
             if (isBlocked) const Chip(label: Text('Blocked')),
             if (isSelected) const Chip(label: Text('Selected')),
           ],
@@ -1085,6 +822,7 @@ class _SavedContactTile extends StatelessWidget {
           children: [
             if (contact.isLanDiscovered)
               const Chip(label: Text('LAN discovered')),
+            if (!isTrusted) const Chip(label: Text('Scan QR first')),
             FilledButton.tonalIcon(
               onPressed: onManage,
               icon: const Icon(Icons.label_outline),
@@ -1096,9 +834,15 @@ class _SavedContactTile extends StatelessWidget {
               label: const Text('Open In Chat'),
             ),
             FilledButton.icon(
-              onPressed: isBlocked ? null : onConnect,
+              onPressed: canConnect ? onConnect : null,
               icon: const Icon(Icons.wifi_tethering_outlined),
-              label: Text(isBlocked ? 'Blocked' : 'Connect'),
+              label: Text(
+                isBlocked
+                    ? 'Blocked'
+                    : canConnect
+                        ? 'Connect'
+                        : 'Needs QR',
+              ),
             ),
             FilledButton.tonalIcon(
               onPressed: onToggleBlocked,
