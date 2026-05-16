@@ -300,7 +300,9 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       targetAddress: targetContact?.lastKnownAddress,
       lastEvent: targetContact == null
           ? 'Offer is being prepared for manual sharing.'
-          : 'Offer is being prepared for ${targetContact.displayName}.',
+          : targetContact.lastKnownAddress == null
+              ? 'Offer is being prepared for ${targetContact.displayName}.'
+              : 'Connecting to ${targetContact.displayName} over LAN.',
       history: [
         PeerSessionHistoryEntry(
           title: targetContact == null
@@ -327,7 +329,9 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       state = state.copyWith(
         lastEvent: targetContact == null
             ? 'Offer ready. Share it with your peer, then paste the answer and ICE payloads here.'
-            : 'Offer ready for ${targetContact.displayName}. Share it through the selected contact channel, then paste the answer and ICE payloads here.',
+            : targetContact.lastKnownAddress == null
+                ? 'Offer ready for ${targetContact.displayName}. Share it through the selected contact channel, then paste the answer and ICE payloads here.'
+                : 'Offer prepared for ${targetContact.displayName}. Waiting for the reply over LAN.',
       );
     } catch (error) {
       _setError('Could not start an offer: $error');
@@ -951,8 +955,9 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     );
 
     state = state.copyWith(
-      lastEvent:
-          'Answer ready. Share it back, then keep exchanging ICE payloads until the channel opens.',
+      lastEvent: (state.targetAddress?.isNotEmpty ?? false)
+          ? 'Answer sent. Waiting for the secure channel to finish connecting.'
+          : 'Answer ready. Share it back, then keep exchanging ICE payloads until the channel opens.',
     );
     _pushHistory(
       title: 'Offer imported',
@@ -993,8 +998,9 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     await _flushPendingRemoteIceCandidates();
 
     state = state.copyWith(
-      lastEvent:
-          'Answer applied. Add any remaining ICE payloads while the secure channel finishes connecting.',
+      lastEvent: (state.targetAddress?.isNotEmpty ?? false)
+          ? 'Answer applied. Waiting for the secure channel to finish connecting.'
+          : 'Answer applied. Add any remaining ICE payloads while the secure channel finishes connecting.',
     );
     _pushHistory(
       title: 'Answer imported',
@@ -1236,8 +1242,9 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
 
       final signalLabel = _signalTypeLabel(envelope.type);
       state = state.copyWith(
-        lastError:
-            'Could not deliver the $signalLabel to $destination automatically. Copy it manually instead.',
+        lastError: (state.targetAddress?.isNotEmpty ?? false)
+            ? 'Could not deliver the $signalLabel to $destination automatically. Check the LAN connection and tap Connect again.'
+            : 'Could not deliver the $signalLabel to $destination automatically. Copy it manually instead.',
       );
       _pushHistory(
         title: 'LAN delivery failed',
@@ -1469,14 +1476,16 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         );
       }
     } else if (connectionState == WebRtcSessionState.failed) {
+      final retryMessage = (state.targetAddress?.isNotEmpty ?? false)
+          ? 'Peer connection failed. Press Connect again to retry over LAN.'
+          : 'Peer connection failed. Start a fresh offer and re-exchange the signaling payloads.';
       nextState = nextState.copyWith(
-        lastError:
-            'Peer connection failed. Start a fresh offer and re-exchange the signaling payloads.',
+        lastError: retryMessage,
       );
       if (state.connectionState != WebRtcSessionState.failed) {
         _pushHistory(
           title: 'Peer connection failed',
-          detail: 'Start a fresh offer and re-exchange the signaling payloads.',
+          detail: retryMessage,
           direction: PeerSessionHistoryDirection.system,
         );
       }

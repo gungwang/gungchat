@@ -1,8 +1,10 @@
-# GungChat
+# GungChat —— 敢说
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.24%2B-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![平台](https://img.shields.io/badge/平台-Windows%20%7C%20Android%20%7C%20iOS-0A7E8C)](#主要功能)
 [![版本](https://img.shields.io/badge/版本-2.0.3-2D7D46)](gungchat/pubspec.yaml)
+
+## 目前最安全的点对点加密通讯应用程序：100%保密、完全隐私、无用户数据泄露、无登录、无服务器依赖、点对点、完全匿名、数据加密、无广告、无追踪、完全自主控制、短信、语音通话、视频通话、开源免费。
 
 一个基于 Flutter 构建、强调隐私和点对点通信的聊天应用。
 

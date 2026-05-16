@@ -1111,6 +1111,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.read(selectedContactFingerprintProvider.notifier).state =
         contact.fingerprint;
 
+    final hasLanAddress =
+        (contact.lastKnownAddress?.trim().isNotEmpty ?? false);
+    if (!hasLanAddress || contact.trustLevel != ContactTrustLevel.verified) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Scan ${contact.displayName}\'s QR code once before using one-tap connect.',
+            ),
+          ),
+        );
+      }
+      return;
+    }
+
     if (intent.autoStartOffer) {
       await ref
           .read(peerSessionControllerProvider.notifier)
@@ -1121,7 +1136,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Connect flow prepared for ${contact.displayName}. Copy the invite once the offer is ready.',
+            'Connecting to ${contact.displayName} over LAN.',
           ),
         ),
       );

@@ -231,6 +231,7 @@ void main() {
       fingerprint: 'peer:alice',
       lastKnownAddress: '192.168.1.25:40524',
       lastSeenAt: DateTime(2026, 4, 24, 11, 30),
+      trustLevel: ContactTrustLevel.verified,
       isLanDiscovered: true,
     );
     final labelService = _FakeLabelService();
@@ -316,7 +317,51 @@ void main() {
     expect(find.text('Muted until you manually unmute it.'), findsOneWidget);
   });
 
-  testWidgets('contacts screen hides QR scan action on Windows', (
+  testWidgets('contacts screen uses a QR-first connect flow', (
+    WidgetTester tester,
+  ) async {
+    await tester.pumpWidget(
+      _buildApp(
+        overrides: <Override>[
+          deviceIdentityProvider.overrideWith(
+            (ref) async => DeviceIdentity(
+              publicKey: Uint8List(32),
+              privateKey: Uint8List(32),
+              fingerprint: 'me:01:02:03',
+            ),
+          ),
+          contactExchangeServiceProvider.overrideWith(
+            (ref) => const _FakeContactExchangeService(),
+          ),
+          contactBookProvider.overrideWith(
+            (ref) => ContactBookController(
+              storage: _FakeContactBookStorage(const <Contact>[]),
+            ),
+          ),
+          blockedContactsProvider.overrideWith(
+            (ref) => ContactBlockController(
+              storage: _FakeContactBlockStore(),
+            ),
+          ),
+        ],
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('Scan Peer QR'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.text('Your Connect QR'), findsOneWidget);
+    expect(find.text('Scan Peer QR'), findsOneWidget);
+    expect(find.text('Scan QR and Connect'), findsOneWidget);
+    expect(find.text('Import Contact'), findsNothing);
+    expect(find.text('Nearby Peers'), findsNothing);
+  });
+
+  testWidgets('contacts screen disables local scanning on Windows', (
     WidgetTester tester,
   ) async {
     final previousPlatform = debugDefaultTargetPlatformOverride;
@@ -350,8 +395,13 @@ void main() {
     );
     await tester.pumpAndSettle();
 
-    expect(find.text('Discovery'), findsOneWidget);
-    expect(find.byTooltip('Scan contact QR'), findsNothing);
+    await tester.scrollUntilVisible(
+      find.text('Scan on Another Device'),
+      300,
+      scrollable: find.byType(Scrollable).first,
+    );
+
+    expect(find.text('Scan on Another Device'), findsOneWidget);
 
     debugDefaultTargetPlatformOverride = previousPlatform;
   });
