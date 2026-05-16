@@ -1356,7 +1356,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final voiceMessageService = ref.watch(voiceMessageServiceProvider);
     final networkAsync = ref.watch(networkStatusProvider);
     final peerSession = ref.watch(peerSessionControllerProvider);
-    final savedContacts = ref.watch(contactBookProvider);
     final selectedContact = ref.watch(selectedContactProvider);
     final blockedContacts = ref.watch(blockedContactsProvider);
     final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
@@ -1421,12 +1420,12 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       : ref.watch(quickReplyMatchesProvider(quickReplyLookupPrefix));
     final conversationTitle = selectedContact?.displayName ?? 'Bootstrap';
     final sessionSummary = canSendSecure
-        ? 'Secure channel open. Your encrypted conversation is live.'
+        ? 'Secure channel open'
         : selectedContact == null
-            ? 'Select or import a contact from the Contacts tab to start a peer chat.'
+            ? 'Choose a contact from Contacts'
             : isSelectedContactBlocked
-                ? '${selectedContact.displayName} is blocked. Unblock them in Contacts before connecting.'
-                : 'Ready to connect to ${selectedContact.displayName}. Open Details for session and network diagnostics.';
+                ? '${selectedContact.displayName} is blocked'
+                : 'Ready to connect';
 
     Future<void> showSessionDetails() async {
       await showModalBottomSheet<void>(
@@ -1518,81 +1517,53 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
 
     return SafeArea(
-      child: Padding(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              selectedContact?.displayName ?? 'GungChat Chats',
-              style: theme.textTheme.headlineSmall,
-            ),
-            const SizedBox(height: 8),
-            Text(
-              sessionSummary,
-              style: theme.textTheme.bodyMedium,
-            ),
-            const SizedBox(height: 16),
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _StateChip(state: peerSession),
-                if (selectedContact != null)
-                  Chip(label: Text('Target ${selectedContact.displayName}')),
-                FilledButton.tonalIcon(
-                  onPressed: showSessionDetails,
-                  icon: const Icon(Icons.tune_outlined),
-                  label: const Text('Details'),
+      child: Column(
+            children: [
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            selectedContact?.displayName ?? 'GungChat',
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.headlineSmall,
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            sessionSummary,
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            style: theme.textTheme.bodySmall?.copyWith(
+                              color: theme.colorScheme.onSurfaceVariant,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    _StateChip(state: peerSession),
+                    const SizedBox(width: 8),
+                    IconButton.filledTonal(
+                      tooltip: 'Connection details',
+                      onPressed: showSessionDetails,
+                      icon: const Icon(Icons.tune_outlined),
+                    ),
+                  ],
                 ),
-              ],
-            ),
-            const SizedBox(height: 12),
-            _ContactTargetCard(
-              contacts: savedContacts,
-              selectedContact: selectedContact,
-              blockedFingerprints: blockedContacts,
-              isSelectedContactBlocked: isSelectedContactBlocked,
-              selectedUri: selectedUri?.toString(),
-              onSelectContact: (fingerprint) {
-                ref.read(selectedContactFingerprintProvider.notifier).state =
-                    fingerprint;
-              },
-              onClearSelection: () {
-                ref.read(selectedContactFingerprintProvider.notifier).state =
-                    null;
-                ref.read(pendingPeerConnectIntentProvider.notifier).state =
-                    null;
-                unawaited(ref.read(voiceMessageServiceProvider).cancelRecording());
-                unawaited(ref.read(voiceMessageServiceProvider).stopPlayback());
-                _highlightClearTimer?.cancel();
-                setState(() {
-                  _editingMessage = null;
-                  _replyingToMessage = null;
-                  _highlightedMessageId = null;
-                });
-              },
-              onCopyUri: selectedUri == null
-                  ? null
-                  : () => _copyText('Manual URI', selectedUri.toString()),
-              onConnect: selectedContact == null
-                  || isSelectedContactBlocked
-                  ? null
-                  : () {
-                      ref
-                          .read(pendingPeerConnectIntentProvider.notifier)
-                          .state = PeerConnectIntent(
-                        fingerprint: selectedContact.fingerprint,
-                      );
-                    },
-            ),
-            const SizedBox(height: 12),
-            Expanded(
-              child: Card(
+              ),
+              Expanded(
                 child: Padding(
-                  padding: const EdgeInsets.all(12),
-                  child: messagesAsync.when(
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Card(
+                    margin: EdgeInsets.zero,
+                    child: Padding(
+                      padding: const EdgeInsets.all(12),
+                      child: messagesAsync.when(
                     data: (messages) {
                       if (activeConversationId != bootstrapConversationId) {
                         WidgetsBinding.instance.addPostFrameCallback((_) {
@@ -1647,13 +1618,16 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     error: (error, stackTrace) {
                       return Center(child: Text('Message load failed: $error'));
                     },
+                      ),
+                    ),
                   ),
                 ),
               ),
-            ),
-            const SizedBox(height: 12),
-            Card(
-              child: Padding(
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 16),
+                child: Card(
+                  margin: EdgeInsets.zero,
+                  child: Padding(
                 padding: const EdgeInsets.all(12),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1668,15 +1642,6 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   : 'Conversation: waiting for secure channel',
                       style: theme.textTheme.labelLarge,
                     ),
-                    if (peerSession.remotePresenceStatus != null &&
-                        peerSession.remotePresenceStatus !=
-                            PeerPresenceStatus.hidden) ...[
-                      const SizedBox(height: 4),
-                      Text(
-                        'Peer status: ${peerSession.remotePresenceStatus!.label}',
-                        style: theme.textTheme.bodySmall,
-                      ),
-                    ],
                     if (peerSession.remoteStatusText != null &&
                         peerSession.remoteStatusText!.isNotEmpty) ...[
                       const SizedBox(height: 4),
@@ -1892,98 +1857,96 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                       ),
                     ],
-                    SwitchListTile.adaptive(
-                      contentPadding: EdgeInsets.zero,
-                      value: _burnAfterRead,
-                      onChanged: editingMessage != null || isRecordingVoice
-                          ? null
-                          : (value) {
-                        setState(() {
-                          _burnAfterRead = value;
-                        });
-                      },
-                      title: const Text('Burn after read by default'),
-                      subtitle: Text(
-                        editingMessage != null
-                            ? 'Retention settings apply only to new messages, not edits.'
-                            : canSendSecure
-                            ? 'Expiry metadata is sent with each encrypted peer message.'
-                            : 'Initial TTL is handled locally until peer session sync is added.',
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      spacing: 8,
-                      runSpacing: 8,
-                      children: [
-                        FilledButton.tonalIcon(
-                          onPressed: () => _openMediaGallery(
-                            conversationId: activeConversationId,
-                            title: conversationTitle,
-                          ),
-                          icon: const Icon(Icons.photo_library_outlined),
-                          label: const Text('Gallery'),
-                        ),
-                        if (canSendSecure) ...[
-                          FilledButton.tonalIcon(
-                            onPressed: _sending || isRecordingVoice || isConversationBlocked
-                                ? null
-                                : () => _pickFilesAndSend(
-                                      replyingToMessage: replyingToMessage,
-                                    ),
-                            icon: const Icon(Icons.attach_file),
-                            label: const Text('Files'),
-                          ),
-                          FilledButton.tonalIcon(
-                            onPressed: _sending || isRecordingVoice || isConversationBlocked
-                                ? null
-                                : () => _shareCurrentLocation(
-                                      replyingToMessage: replyingToMessage,
-                                    ),
-                            icon: const Icon(Icons.place_outlined),
-                            label: const Text('Location'),
-                          ),
-                          FilledButton.tonalIcon(
-                            onPressed: _sending || isRecordingVoice || isConversationBlocked
-                                ? null
-                                : () => _shareContactCard(
-                                      replyingToMessage: replyingToMessage,
-                                    ),
-                            icon: const Icon(Icons.contact_page_outlined),
-                            label: const Text('Contact'),
-                          ),
-                        ],
-                      ],
-                    ),
-                    const SizedBox(height: 8),
                     Row(
                       children: [
-                        if (canSendSecure) ...[
-                          Expanded(
-                            child: OutlinedButton.icon(
-                              onPressed: identityAsync.asData == null ||
-                                      _sending ||
-                                      editingMessage != null ||
-                                      isConversationBlocked
-                                  ? null
-                                  : () => _toggleVoiceRecording(
-                                        canSendSecure: canSendSecure,
-                                        replyingToMessage: replyingToMessage,
-                                      ),
-                              icon: Icon(
-                                isRecordingVoice
-                                    ? Icons.stop_circle_outlined
-                                    : Icons.mic_none,
-                              ),
-                              label: Text(
-                                isRecordingVoice
-                                    ? 'Stop & Send Voice'
-                                    : 'Record Voice',
+                        PopupMenuButton<_ChatAttachmentAction>(
+                          tooltip: 'More actions',
+                          enabled: !_sending && !isRecordingVoice,
+                          icon: const Icon(Icons.add_circle_outline),
+                          onSelected: (action) {
+                            switch (action) {
+                              case _ChatAttachmentAction.gallery:
+                                _openMediaGallery(
+                                  conversationId: activeConversationId,
+                                  title: conversationTitle,
+                                );
+                              case _ChatAttachmentAction.files:
+                                if (canSendSecure && !isConversationBlocked) {
+                                  _pickFilesAndSend(
+                                    replyingToMessage: replyingToMessage,
+                                  );
+                                }
+                              case _ChatAttachmentAction.location:
+                                if (canSendSecure && !isConversationBlocked) {
+                                  _shareCurrentLocation(
+                                    replyingToMessage: replyingToMessage,
+                                  );
+                                }
+                              case _ChatAttachmentAction.contact:
+                                if (canSendSecure && !isConversationBlocked) {
+                                  _shareContactCard(
+                                    replyingToMessage: replyingToMessage,
+                                  );
+                                }
+                            }
+                          },
+                          itemBuilder: (context) => [
+                            const PopupMenuItem(
+                              value: _ChatAttachmentAction.gallery,
+                              child: ListTile(
+                                leading: Icon(Icons.photo_library_outlined),
+                                title: Text('Gallery'),
                               ),
                             ),
+                            PopupMenuItem(
+                              value: _ChatAttachmentAction.files,
+                              enabled: canSendSecure && !isConversationBlocked,
+                              child: const ListTile(
+                                leading: Icon(Icons.attach_file),
+                                title: Text('Files'),
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: _ChatAttachmentAction.location,
+                              enabled: canSendSecure && !isConversationBlocked,
+                              child: const ListTile(
+                                leading: Icon(Icons.place_outlined),
+                                title: Text('Location'),
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: _ChatAttachmentAction.contact,
+                              enabled: canSendSecure && !isConversationBlocked,
+                              child: const ListTile(
+                                leading: Icon(Icons.contact_page_outlined),
+                                title: Text('Contact'),
+                              ),
+                            ),
+                          ],
+                        ),
+                        if (canSendSecure) ...[
+                          const SizedBox(width: 4),
+                          IconButton(
+                            tooltip: isRecordingVoice
+                                ? 'Stop and send voice'
+                                : 'Record voice',
+                            onPressed: identityAsync.asData == null ||
+                                    _sending ||
+                                    editingMessage != null ||
+                                    isConversationBlocked
+                                ? null
+                                : () => _toggleVoiceRecording(
+                                      canSendSecure: canSendSecure,
+                                      replyingToMessage: replyingToMessage,
+                                    ),
+                            icon: Icon(
+                              isRecordingVoice
+                                  ? Icons.stop_circle_outlined
+                                  : Icons.mic_none,
+                            ),
                           ),
-                          const SizedBox(width: 12),
                         ],
+                        const SizedBox(width: 8),
                         Expanded(
                           child: FilledButton.icon(
                             onPressed: identityAsync.asData == null ||
@@ -2022,12 +1985,34 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         ),
                       ],
                     ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            'Burn after read',
+                            style: theme.textTheme.bodySmall,
+                          ),
+                        ),
+                        Switch.adaptive(
+                          value: _burnAfterRead,
+                          onChanged: editingMessage != null || isRecordingVoice
+                              ? null
+                              : (value) {
+                                  setState(() {
+                                    _burnAfterRead = value;
+                                  });
+                                },
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-            ),
-          ],
-        ),
+                ),
+              ),
+            ],
+          );
       ),
     );
   }
@@ -2072,6 +2057,13 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
               ),
     );
   }
+}
+
+enum _ChatAttachmentAction {
+  gallery,
+  files,
+  location,
+  contact,
 }
 
 class _ContactTargetCard extends StatelessWidget {

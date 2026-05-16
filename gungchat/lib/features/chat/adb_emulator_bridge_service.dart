@@ -58,16 +58,6 @@ class AdbEmulatorBridgeService {
       <String>[
         '-s',
         emulatorSerial,
-        'reverse',
-        'tcp:$signalPort',
-        'tcp:$signalPort',
-      ],
-    );
-    await _runChecked(
-      adbPath,
-      <String>[
-        '-s',
-        emulatorSerial,
         'forward',
         'tcp:$forwardPort',
         'tcp:$signalPort',

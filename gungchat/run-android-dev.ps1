@@ -153,7 +153,6 @@ Write-Step "Waiting for Android boot on $deviceSerial"
 Wait-ForAndroidBoot -AdbExe $adbExe -Serial $deviceSerial
 
 Write-Step "Configuring ADB bridge ports on $deviceSerial"
-& $adbExe -s $deviceSerial reverse "tcp:$SignalPort" "tcp:$SignalPort" | Out-Null
 $forwardBindings = (& $adbExe -s $deviceSerial forward --list 2>$null | Out-String)
 if ($forwardBindings -match "tcp:$ForwardPort") {
   & $adbExe -s $deviceSerial forward --remove "tcp:$ForwardPort" | Out-Null
@@ -164,7 +163,6 @@ Write-Step "Force-stopping $AppId before launch"
 & $adbExe -s $deviceSerial shell am force-stop $AppId | Out-Null
 if ($SkipFlutterRun) {
   Write-Step "Emulator ready on $deviceSerial"
-  Write-Host "ADB reverse: localhost:$SignalPort -> host:$SignalPort" -ForegroundColor Green
   Write-Host "ADB forward: host:$ForwardPort -> device:$SignalPort" -ForegroundColor Green
   Write-Host "Next command: flutter run -d $deviceSerial" -ForegroundColor Green
   exit 0
