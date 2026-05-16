@@ -37,6 +37,7 @@ import '../organization/contact_notes_service.dart';
 import '../organization/conversation_mute_service.dart';
 import '../organization/label_service.dart';
 import '../preferences/keyboard_shortcut_service.dart';
+import '../preferences/locale_service.dart';
 import '../preferences/notification_prefs_service.dart';
 import '../preferences/theme_service.dart';
 import '../features/settings/app_lock_preferences.dart';
@@ -87,6 +88,10 @@ final appLockPreferencesStorageProvider =
 final themePreferencesStorageProvider = Provider<ThemePreferencesStorage>((ref) {
   return const ThemePreferencesStorage();
 });
+final localePreferencesStorageProvider =
+    Provider<LocalePreferencesStorage>((ref) {
+  return const LocalePreferencesStorage();
+});
 final notificationPreferencesStorageProvider =
     Provider<NotificationPreferencesStorage>((ref) {
   return const NotificationPreferencesStorage();
@@ -132,8 +137,17 @@ final appThemeModeProvider =
     storage: ref.watch(themePreferencesStorageProvider),
   );
 });
+final appLocaleModeProvider =
+    StateNotifierProvider<LocalePreferencesController, AppLocaleMode>((ref) {
+  return LocalePreferencesController(
+    storage: ref.watch(localePreferencesStorageProvider),
+  );
+});
 final themeModeProvider = Provider<ThemeMode>((ref) {
   return ref.watch(appThemeModeProvider).flutterThemeMode;
+});
+final appLocaleProvider = Provider<Locale?>((ref) {
+  return ref.watch(appLocaleModeProvider).locale;
 });
 final notificationPreferencesProvider = StateNotifierProvider<
     NotificationPreferencesController,

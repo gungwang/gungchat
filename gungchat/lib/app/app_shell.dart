@@ -4,6 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/accessibility/a11y_helper.dart';
+import '../l10n/app_localizations.dart';
+import '../l10n/l10n.dart';
 import '../core/networking/signaling_service.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/chat/lan_signaling_service.dart';
@@ -12,6 +14,7 @@ import '../features/chat/video_call_overlay.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../models/contact.dart';
 import '../preferences/keyboard_shortcut_service.dart';
+import '../preferences/theme_service.dart';
 import '../features/settings/app_lock_preferences.dart';
 import '../features/settings/settings_screen.dart';
 import 'providers.dart';
@@ -186,6 +189,7 @@ class _AppShellState extends ConsumerState<AppShell>
       return;
     }
 
+    final l10n = context.l10n;
     final announcementView = View.of(context);
     final announcementDirection =
         Directionality.maybeOf(context) ?? TextDirection.ltr;
@@ -208,7 +212,7 @@ class _AppShellState extends ConsumerState<AppShell>
                   }).toList(growable: false);
 
             return AlertDialog(
-              title: const Text('Quick search'),
+              title: Text(l10n.quickSearchTitle),
               content: SizedBox(
                 width: 420,
                 child: Column(
@@ -217,10 +221,10 @@ class _AppShellState extends ConsumerState<AppShell>
                     TextField(
                       controller: controller,
                       autofocus: true,
-                      decoration: const InputDecoration(
-                        border: OutlineInputBorder(),
-                        labelText: 'Search contacts',
-                        hintText: 'Name or fingerprint',
+                      decoration: InputDecoration(
+                        border: const OutlineInputBorder(),
+                        labelText: l10n.searchContactsLabel,
+                        hintText: l10n.searchContactsHint,
                       ),
                       onChanged: (value) {
                         setState(() {
@@ -231,7 +235,7 @@ class _AppShellState extends ConsumerState<AppShell>
                     const SizedBox(height: 12),
                     Flexible(
                       child: matches.isEmpty
-                          ? const Center(child: Text('No contacts match that search.'))
+                          ? Center(child: Text(l10n.noContactsMatchSearch))
                           : ListView.separated(
                               shrinkWrap: true,
                               itemCount: matches.length,
@@ -254,7 +258,7 @@ class _AppShellState extends ConsumerState<AppShell>
               actions: [
                 TextButton(
                   onPressed: () => Navigator.of(dialogContext).pop(),
-                  child: const Text('Close'),
+                  child: Text(l10n.closeAction),
                 ),
               ],
             );
@@ -276,7 +280,7 @@ class _AppShellState extends ConsumerState<AppShell>
     unawaited(
       A11yHelper.announceWithView(
         view: announcementView,
-        message: 'Opened chat for ${selectedContact.displayName}',
+        message: '${l10n.openedChatForLabel} ${selectedContact.displayName}',
         direction: announcementDirection,
       ),
     );
@@ -287,6 +291,7 @@ class _AppShellState extends ConsumerState<AppShell>
       return;
     }
 
+    final l10n = context.l10n;
     final announcementView = View.of(context);
     final announcementDirection =
         Directionality.maybeOf(context) ?? TextDirection.ltr;
@@ -298,7 +303,7 @@ class _AppShellState extends ConsumerState<AppShell>
       unawaited(
         A11yHelper.announceWithView(
           view: announcementView,
-          message: '${contact.displayName} unmuted',
+          message: '${l10n.unmutedAnnouncementLabel} ${contact.displayName}',
           direction: announcementDirection,
         ),
       );
@@ -307,7 +312,7 @@ class _AppShellState extends ConsumerState<AppShell>
       unawaited(
         A11yHelper.announceWithView(
           view: announcementView,
-          message: '${contact.displayName} muted',
+          message: '${l10n.mutedAnnouncementLabel} ${contact.displayName}',
           direction: announcementDirection,
         ),
       );
@@ -323,6 +328,7 @@ class _AppShellState extends ConsumerState<AppShell>
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final selectedIndex = ref.watch(navigationIndexProvider);
     final peerSession = ref.watch(peerSessionControllerProvider);
     final effectivePresenceStatus = ref.watch(effectivePresenceStatusProvider);
@@ -393,7 +399,7 @@ class _AppShellState extends ConsumerState<AppShell>
                 await ref.read(appThemeModeProvider.notifier).cycleTheme();
                 await A11yHelper.announceWithView(
                   view: announcementView,
-                  message: 'Theme changed to ${ref.read(appThemeModeProvider).name}',
+                  message: '${l10n.themeChangedToLabel} ${_themeModeLabel(l10n, ref.read(appThemeModeProvider))}',
                   direction: announcementDirection,
                 );
               }());
@@ -435,21 +441,21 @@ class _AppShellState extends ConsumerState<AppShell>
                 bottomNavigationBar: NavigationBar(
                   selectedIndex: selectedIndex,
                   onDestinationSelected: _selectTab,
-                  destinations: const [
+                  destinations: [
                     NavigationDestination(
-                      icon: Icon(Icons.chat_bubble_outline),
-                      selectedIcon: Icon(Icons.chat_bubble),
-                      label: 'Chats',
+                      icon: const Icon(Icons.chat_bubble_outline),
+                      selectedIcon: const Icon(Icons.chat_bubble),
+                      label: l10n.chatTab,
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.wifi_tethering_outlined),
-                      selectedIcon: Icon(Icons.wifi_tethering),
-                      label: 'Contacts',
+                      icon: const Icon(Icons.wifi_tethering_outlined),
+                      selectedIcon: const Icon(Icons.wifi_tethering),
+                      label: l10n.contactsTab,
                     ),
                     NavigationDestination(
-                      icon: Icon(Icons.settings_outlined),
-                      selectedIcon: Icon(Icons.settings),
-                      label: 'Settings',
+                      icon: const Icon(Icons.settings_outlined),
+                      selectedIcon: const Icon(Icons.settings),
+                      label: l10n.settingsTab,
                     ),
                   ],
                 ),
@@ -467,6 +473,14 @@ class _AppShellState extends ConsumerState<AppShell>
         ),
       ),
     );
+  }
+
+  String _themeModeLabel(AppLocalizations l10n, AppThemeMode mode) {
+    return switch (mode) {
+      AppThemeMode.auto => l10n.themeModeAuto,
+      AppThemeMode.light => l10n.themeModeLight,
+      AppThemeMode.dark => l10n.themeModeDark,
+    };
   }
 }
 
@@ -505,6 +519,7 @@ class _AppLockOverlay extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final theme = Theme.of(context);
 
     return ColoredBox(
@@ -524,13 +539,13 @@ class _AppLockOverlay extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'GungChat is locked',
+                  l10n.appLockedTitle,
                   style: theme.textTheme.headlineSmall,
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 12),
                 Text(
-                  'Unlock with your device credentials to continue.',
+                  l10n.unlockPrompt,
                   style: theme.textTheme.bodyMedium,
                   textAlign: TextAlign.center,
                 ),
@@ -544,7 +559,9 @@ class _AppLockOverlay extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.lock_open),
-                  label: Text(unlocking ? 'Unlocking...' : 'Unlock'),
+                    label: Text(
+                      unlocking ? l10n.unlockingAction : l10n.unlockAction,
+                    ),
                 ),
               ],
             ),

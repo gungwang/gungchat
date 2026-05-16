@@ -5,6 +5,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app/providers.dart';
 import '../../core/accessibility/a11y_helper.dart';
+import '../../l10n/l10n.dart';
+import '../../preferences/keyboard_shortcut_service.dart';
+import '../../preferences/locale_service.dart';
 import '../../preferences/notification_prefs_service.dart';
 import '../../preferences/theme_service.dart';
 import '../../templates/quick_reply_service.dart';
@@ -15,6 +18,8 @@ class SettingsScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final l10n = context.l10n;
+    final appLocaleMode = ref.watch(appLocaleModeProvider);
     final themeMode = ref.watch(appThemeModeProvider);
     final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
     final localPresenceStatus = ref.watch(localPresenceStatusProvider);
@@ -27,7 +32,10 @@ class SettingsScreen extends ConsumerWidget {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Settings', style: Theme.of(context).textTheme.headlineSmall),
+          Text(
+            l10n.settingsTitle,
+            style: Theme.of(context).textTheme.headlineSmall,
+          ),
           const SizedBox(height: 16),
           Card(
             child: Padding(
@@ -36,28 +44,28 @@ class SettingsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Appearance',
+                    l10n.appearanceTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<AppThemeMode>(
                     initialValue: themeMode,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Theme mode',
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: l10n.themeModeLabel,
                     ),
-                    items: const [
+                    items: [
                       DropdownMenuItem(
                         value: AppThemeMode.auto,
-                        child: Text('Auto'),
+                        child: Text(_themeModeLabel(context, AppThemeMode.auto)),
                       ),
                       DropdownMenuItem(
                         value: AppThemeMode.light,
-                        child: Text('Light'),
+                        child: Text(_themeModeLabel(context, AppThemeMode.light)),
                       ),
                       DropdownMenuItem(
                         value: AppThemeMode.dark,
-                        child: Text('Dark'),
+                        child: Text(_themeModeLabel(context, AppThemeMode.dark)),
                       ),
                     ],
                     onChanged: (value) {
@@ -70,9 +78,33 @@ class SettingsScreen extends ConsumerWidget {
                     },
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Keyboard shortcut: Ctrl+Shift+D cycles between Auto, Light, and Dark.',
+                  Text(l10n.keyboardShortcutThemeHint),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<AppLocaleMode>(
+                    initialValue: appLocaleMode,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: l10n.languageLabel,
+                    ),
+                    items: AppLocaleMode.values
+                        .map(
+                          (mode) => DropdownMenuItem(
+                            value: mode,
+                            child: Text(_languageLabel(context, mode)),
+                          ),
+                        )
+                        .toList(growable: false),
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      unawaited(
+                        ref.read(appLocaleModeProvider.notifier).setLocale(value),
+                      );
+                    },
                   ),
+                  const SizedBox(height: 8),
+                  Text(l10n.languageChangeHelp),
                 ],
               ),
             ),
@@ -90,10 +122,8 @@ class SettingsScreen extends ConsumerWidget {
             child: SwitchListTile.adaptive(
               value: true,
               onChanged: null,
-              title: const Text('Screenshot protection'),
-              subtitle: const Text(
-                'Android now enables secure windows. iOS and desktop recording detection still need platform-specific follow-up.',
-              ),
+              title: Text(l10n.screenshotProtectionTitle),
+              subtitle: Text(l10n.screenshotProtectionSubtitle),
             ),
           ),
           const SizedBox(height: 12),
@@ -105,10 +135,8 @@ class SettingsScreen extends ConsumerWidget {
                   ref.read(readReceiptsEnabledProvider.notifier).setEnabled(value),
                 );
               },
-              title: const Text('Read receipts'),
-              subtitle: const Text(
-                'Opt in to send encrypted read confirmations when you open a conversation and view delivered messages.',
-              ),
+              title: Text(l10n.readReceiptsTitle),
+              subtitle: Text(l10n.readReceiptsSubtitle),
             ),
           ),
           const SizedBox(height: 12),
@@ -120,10 +148,8 @@ class SettingsScreen extends ConsumerWidget {
                   ref.read(linkPreviewsEnabledProvider.notifier).setEnabled(value),
                 );
               },
-              title: const Text('Link previews'),
-              subtitle: const Text(
-                'Off by default for privacy. Enabling previews lets your device fetch webpage metadata directly, which can reveal your IP address to those sites.',
-              ),
+              title: Text(l10n.linkPreviewsTitle),
+              subtitle: Text(l10n.linkPreviewsSubtitle),
             ),
           ),
           const SizedBox(height: 12),
@@ -134,21 +160,21 @@ class SettingsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Presence status',
+                    l10n.presenceStatusTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
                   DropdownButtonFormField<PeerPresenceStatus>(
                     initialValue: localPresenceStatus,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Shared presence',
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: l10n.sharedPresenceLabel,
                     ),
                     items: PeerPresenceStatus.values
                         .map(
                           (status) => DropdownMenuItem(
                             value: status,
-                            child: Text(status.label),
+                            child: Text(_presenceStatusLabel(context, status)),
                           ),
                         )
                         .toList(growable: false),
@@ -162,9 +188,7 @@ class SettingsScreen extends ConsumerWidget {
                     },
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'Online is shared while the app is in the foreground and automatically falls back to Away in the background. Hidden suppresses your presence updates.',
-                  ),
+                  Text(l10n.sharedPresenceHelp),
                 ],
               ),
             ),
@@ -177,7 +201,7 @@ class SettingsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Notification preferences',
+                    l10n.notificationPreferencesTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
@@ -192,7 +216,9 @@ class SettingsScreen extends ConsumerWidget {
                               .setPreference(entry.key, value),
                         );
                       },
-                      title: Text(entry.key.label),
+                      title: Text(
+                        _notificationPreferenceLabel(context, entry.key),
+                      ),
                     ),
                 ],
               ),
@@ -206,14 +232,14 @@ class SettingsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Keyboard shortcuts',
+                    l10n.keyboardShortcutsTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
                   for (final entry in shortcutService.shortcuts.entries)
                     ListTile(
                       contentPadding: EdgeInsets.zero,
-                      title: Text(shortcutService.describe(entry.key)),
+                      title: Text(_shortcutDescription(context, entry.key)),
                       subtitle: Text(_shortcutLabel(entry.value)),
                     ),
                 ],
@@ -228,7 +254,7 @@ class SettingsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'App lock',
+                    l10n.appLockTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
@@ -240,16 +266,14 @@ class SettingsScreen extends ConsumerWidget {
                         ref.read(appLockSettingsProvider.notifier).setEnabled(value),
                       );
                     },
-                    title: const Text('Require biometric or device unlock'),
-                    subtitle: const Text(
-                      'When enabled, GungChat prompts for device authentication on launch and after returning from the background.',
-                    ),
+                    title: Text(l10n.requireUnlockTitle),
+                    subtitle: Text(l10n.requireUnlockSubtitle),
                   ),
                   DropdownButtonFormField<int>(
                     initialValue: appLockSettings.timeoutSeconds,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Re-lock after',
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: l10n.relockAfterLabel,
                     ),
                     items: const [30, 60, 300, 600]
                         .map(
@@ -257,8 +281,8 @@ class SettingsScreen extends ConsumerWidget {
                             value: seconds,
                             child: Text(
                               seconds < 60
-                                  ? '$seconds seconds'
-                                  : '${seconds ~/ 60} minute${seconds == 60 ? '' : 's'}',
+                                  ? '$seconds ${seconds == 1 ? l10n.secondUnit : l10n.secondsUnit}'
+                                  : '${seconds ~/ 60} ${(seconds ~/ 60) == 1 ? l10n.minuteUnit : l10n.minutesUnit}',
                             ),
                           ),
                         )
@@ -288,21 +312,19 @@ class SettingsScreen extends ConsumerWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Accessibility',
+                    l10n.accessibilityTitle,
                     style: Theme.of(context).textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
                   Text(
-                    'Reduced motion: ${A11yHelper.prefersReducedMotion(context) ? 'On' : 'Off'}',
+                    '${l10n.reducedMotionLabel}: ${A11yHelper.prefersReducedMotion(context) ? l10n.onValue : l10n.offValue}',
                   ),
                   const SizedBox(height: 4),
                   Text(
-                    'High contrast: ${A11yHelper.isHighContrast(context) ? 'On' : 'Off'}',
+                    '${l10n.highContrastLabel}: ${A11yHelper.isHighContrast(context) ? l10n.onValue : l10n.offValue}',
                   ),
                   const SizedBox(height: 8),
-                  const Text(
-                    'This phase uses 48dp minimum touch targets, screen-reader announcements for key actions, and keyboard shortcut discovery surfaces.',
-                  ),
+                  Text(l10n.accessibilitySummary),
                 ],
               ),
             ),
@@ -312,20 +334,16 @@ class SettingsScreen extends ConsumerWidget {
             child: SwitchListTile.adaptive(
               value: true,
               onChanged: null,
-              title: const Text('Burn after read default'),
-              subtitle: const Text(
-                'The chat bootstrap flow already assumes ephemeral-first messaging.',
-              ),
+              title: Text(l10n.burnAfterReadDefaultTitle),
+              subtitle: Text(l10n.burnAfterReadDefaultSubtitle),
             ),
           ),
           const SizedBox(height: 12),
           Card(
             child: ListTile(
               leading: const Icon(Icons.shield_outlined),
-              title: const Text('Anti-surveillance guard'),
-              subtitle: const Text(
-                'Transport is in place. Next platform work is expanding recording detection and privacy guard behavior beyond Android secure windows.',
-              ),
+              title: Text(l10n.antiSurveillanceGuardTitle),
+              subtitle: Text(l10n.antiSurveillanceGuardSubtitle),
             ),
           ),
         ],
@@ -373,6 +391,7 @@ class _QuickReplyTemplatesCardState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final templatesAsync = ref.watch(allQuickRepliesProvider);
     final theme = Theme.of(context);
 
@@ -381,16 +400,16 @@ class _QuickReplyTemplatesCardState
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Quick reply templates', style: theme.textTheme.titleMedium),
+          Text(l10n.quickReplyTemplatesTitle, style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
                 child: TextField(
                   controller: _shortCodeController,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Shortcode',
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: l10n.shortcodeLabel,
                     hintText: '/hi',
                   ),
                 ),
@@ -402,9 +421,9 @@ class _QuickReplyTemplatesCardState
                   controller: _contentController,
                   minLines: 1,
                   maxLines: 2,
-                  decoration: const InputDecoration(
-                    border: OutlineInputBorder(),
-                    labelText: 'Template text',
+                  decoration: InputDecoration(
+                    border: const OutlineInputBorder(),
+                    labelText: l10n.templateTextLabel,
                   ),
                 ),
               ),
@@ -424,7 +443,7 @@ class _QuickReplyTemplatesCardState
                         child: CircularProgressIndicator(strokeWidth: 2),
                       )
                     : const Icon(Icons.add),
-                label: const Text('Save template'),
+                label: Text(l10n.saveTemplateAction),
               ),
             ),
           ),
@@ -432,9 +451,7 @@ class _QuickReplyTemplatesCardState
           templatesAsync.when(
             data: (templates) {
               if (templates.isEmpty) {
-                return const Text(
-                  'No quick replies saved yet. Create one here, then type its shortcode in chat to insert it instantly.',
-                );
+                return Text(l10n.noQuickRepliesYet);
               }
 
               return Column(
@@ -444,13 +461,13 @@ class _QuickReplyTemplatesCardState
                       contentPadding: EdgeInsets.zero,
                       title: Text('/${template.shortCode}'),
                       subtitle: Text(
-                        '${template.content}\nUsed ${template.usageCount} time${template.usageCount == 1 ? '' : 's'}',
+                        '${template.content}\n${l10n.usedLabel} ${template.usageCount} ${template.usageCount == 1 ? l10n.timeSingular : l10n.timePlural}',
                       ),
                       isThreeLine: true,
                       trailing: ConstrainedBox(
                         constraints: A11yHelper.minimumTouchTarget,
                         child: IconButton(
-                          tooltip: 'Delete template',
+                          tooltip: l10n.deleteTemplateTooltip,
                           onPressed: () => _deleteTemplate(template),
                           icon: const Icon(Icons.delete_outline),
                         ),
@@ -460,7 +477,9 @@ class _QuickReplyTemplatesCardState
               );
             },
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Could not load quick replies: $error'),
+            error: (error, _) => Text(
+              '${l10n.quickRepliesLoadFailedLabel}: $error',
+            ),
           ),
         ],
       ),
@@ -485,7 +504,7 @@ class _QuickReplyTemplatesCardState
       _contentController.clear();
       ref.invalidate(allQuickRepliesProvider);
       if (mounted) {
-        A11yHelper.announce('Quick reply saved', context);
+        A11yHelper.announce(context.l10n.quickReplySavedLabel, context);
       }
     } finally {
       if (mounted) {
@@ -501,7 +520,7 @@ class _QuickReplyTemplatesCardState
     await service.deleteTemplate(template.shortCode);
     ref.invalidate(allQuickRepliesProvider);
     if (mounted) {
-      A11yHelper.announce('Quick reply deleted', context);
+      A11yHelper.announce(context.l10n.quickReplyDeletedLabel, context);
     }
   }
 }
@@ -544,6 +563,7 @@ class _CustomStatusCardState extends ConsumerState<_CustomStatusCard> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final theme = Theme.of(context);
 
     return Padding(
@@ -551,15 +571,15 @@ class _CustomStatusCardState extends ConsumerState<_CustomStatusCard> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text('Custom status', style: theme.textTheme.titleMedium),
+          Text(l10n.customStatusTitle, style: theme.textTheme.titleMedium),
           const SizedBox(height: 12),
           TextField(
             controller: _controller,
             maxLength: 80,
-            decoration: const InputDecoration(
-              border: OutlineInputBorder(),
-              labelText: 'Status text',
-              hintText: 'In a meeting, Do not disturb, Available later...',
+            decoration: InputDecoration(
+              border: const OutlineInputBorder(),
+              labelText: l10n.statusTextLabel,
+              hintText: l10n.statusTextHint,
             ),
             onChanged: (value) {
               unawaited(
@@ -568,11 +588,70 @@ class _CustomStatusCardState extends ConsumerState<_CustomStatusCard> {
             },
           ),
           const SizedBox(height: 8),
-          const Text(
-            'This text is shared directly with the active peer session alongside your presence status.',
-          ),
+          Text(l10n.customStatusHelp),
         ],
       ),
     );
+  }
+}
+
+extension on SettingsScreen {
+  String _languageLabel(BuildContext context, AppLocaleMode mode) {
+    final l10n = context.l10n;
+    return switch (mode) {
+      AppLocaleMode.system => l10n.languageSystem,
+      AppLocaleMode.english => l10n.languageEnglish,
+      AppLocaleMode.chineseSimplified => l10n.languageChineseSimplified,
+      AppLocaleMode.chineseTraditional => l10n.languageChineseTraditional,
+      AppLocaleMode.spanish => l10n.languageSpanish,
+      AppLocaleMode.french => l10n.languageFrench,
+    };
+  }
+
+  String _themeModeLabel(BuildContext context, AppThemeMode mode) {
+    final l10n = context.l10n;
+    return switch (mode) {
+      AppThemeMode.auto => l10n.themeModeAuto,
+      AppThemeMode.light => l10n.themeModeLight,
+      AppThemeMode.dark => l10n.themeModeDark,
+    };
+  }
+
+  String _presenceStatusLabel(BuildContext context, PeerPresenceStatus status) {
+    final l10n = context.l10n;
+    return switch (status) {
+      PeerPresenceStatus.online => l10n.presenceOnline,
+      PeerPresenceStatus.away => l10n.presenceAway,
+      PeerPresenceStatus.hidden => l10n.presenceHidden,
+    };
+  }
+
+  String _notificationPreferenceLabel(
+    BuildContext context,
+    NotificationPreferenceKey key,
+  ) {
+    final l10n = context.l10n;
+    return switch (key) {
+      NotificationPreferenceKey.messages => l10n.notificationMessages,
+      NotificationPreferenceKey.calls => l10n.notificationCalls,
+      NotificationPreferenceKey.presence => l10n.notificationPresenceChanges,
+      NotificationPreferenceKey.connectionRequests =>
+        l10n.notificationConnectionRequests,
+      NotificationPreferenceKey.reactions => l10n.notificationReactions,
+      NotificationPreferenceKey.sound => l10n.notificationSound,
+      NotificationPreferenceKey.vibrate => l10n.notificationVibrate,
+    };
+  }
+
+  String _shortcutDescription(BuildContext context, AppShortcutAction action) {
+    final l10n = context.l10n;
+    return switch (action) {
+      AppShortcutAction.quickSearch => l10n.shortcutOpenQuickSearch,
+      AppShortcutAction.cycleTheme => l10n.shortcutCycleThemeMode,
+      AppShortcutAction.nextTab => l10n.shortcutNextTab,
+      AppShortcutAction.previousTab => l10n.shortcutPreviousTab,
+      AppShortcutAction.focusComposer => l10n.shortcutFocusComposer,
+      AppShortcutAction.muteConversation => l10n.shortcutMuteConversation,
+    };
   }
 }

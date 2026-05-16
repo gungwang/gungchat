@@ -1,5 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:shared_preferences/shared_preferences.dart';
@@ -11,6 +12,7 @@ import 'package:gungchat/features/contacts/contact_book_controller.dart';
 import 'package:gungchat/features/contacts/contact_book_storage.dart';
 import 'package:gungchat/features/contacts/contact_exchange_service.dart';
 import 'package:gungchat/features/contacts/contacts_screen.dart';
+import 'package:gungchat/l10n/app_localizations.dart';
 import 'package:gungchat/models/contact.dart';
 import 'package:gungchat/organization/contact_notes_service.dart';
 import 'package:gungchat/organization/conversation_mute_service.dart';
@@ -211,7 +213,16 @@ class _FakeConversationMuteService extends ConversationMuteService {
 Widget _buildApp({required List<Override> overrides}) {
   return ProviderScope(
     overrides: overrides,
-    child: const MaterialApp(home: Scaffold(body: ContactsScreen())),
+    child: MaterialApp(
+      supportedLocales: AppLocalizations.supportedLocales,
+      localizationsDelegates: [
+        AppLocalizations.delegate,
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      home: Scaffold(body: ContactsScreen()),
+    ),
   );
 }
 
