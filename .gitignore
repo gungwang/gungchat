@@ -13,3 +13,5 @@ zulip/*
 
 .codex
 test.html
+**/installer/output/
+
