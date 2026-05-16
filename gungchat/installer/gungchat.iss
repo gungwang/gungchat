@@ -1,5 +1,5 @@
 #define MyAppName "GungChat"
-#define MyAppVersion "2.0.3"
+#define MyAppVersion "2.0.27"
 #define MyAppPublisher "GungChat"
 #define MyAppExeName "gungchat.exe"
 #define MyAppSourceDir "..\build\windows\x64\runner\Release"
