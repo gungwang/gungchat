@@ -48,17 +48,30 @@ function Sync-InstallerVersion {
     [string]$InstallerVersion
   )
 
-  $pattern = '(?m)^#define MyAppVersion ".*"$'
+  $linePattern = '^\s*#define\s+MyAppVersion\s+"[^"]+"\s*$'
   $replacement = "#define MyAppVersion `"$InstallerVersion`""
-  $content = Get-Content -Path $InstallerPath -Raw
+  $lines = Get-Content -Path $InstallerPath
+  $lineIndex = -1
 
-  if ($content -notmatch $pattern) {
+  for ($index = 0; $index -lt $lines.Count; $index++) {
+    if ($lines[$index] -match $linePattern) {
+      $lineIndex = $index
+      break
+    }
+  }
+
+  if ($lineIndex -lt 0) {
     throw "Could not find MyAppVersion in $InstallerPath"
   }
 
-  $updated = $content -replace $pattern, $replacement
-  if ($updated -ceq $content) {
+  if ($lines[$lineIndex] -ceq $replacement) {
     return $false
+  }
+
+  $lines[$lineIndex] = $replacement
+  $updated = [string]::Join([Environment]::NewLine, $lines)
+  if (-not $updated.EndsWith([Environment]::NewLine)) {
+    $updated += [Environment]::NewLine
   }
 
   [System.IO.File]::WriteAllText(
