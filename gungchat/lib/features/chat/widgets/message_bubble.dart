@@ -40,9 +40,15 @@ class MessageBubble extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
-    final alignment =
-        message.isOutgoing ? Alignment.centerRight : Alignment.centerLeft;
-    final backgroundColor = message.isOutgoing
+    final isSystemMessage = message.type == MessageType.system;
+    final alignment = isSystemMessage
+      ? Alignment.center
+      : message.isOutgoing
+        ? Alignment.centerRight
+        : Alignment.centerLeft;
+    final backgroundColor = isSystemMessage
+      ? theme.colorScheme.surfaceContainerHighest.withValues(alpha: 0.84)
+      : message.isOutgoing
         ? theme.colorScheme.primaryContainer
         : theme.colorScheme.surfaceContainerHighest;
     final replyPreview = _replyPreviewText();
@@ -57,7 +63,7 @@ class MessageBubble extends ConsumerWidget {
       duration: const Duration(milliseconds: 220),
       margin: const EdgeInsets.symmetric(vertical: 6),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-      constraints: const BoxConstraints(maxWidth: 420),
+      constraints: BoxConstraints(maxWidth: isSystemMessage ? 320 : 420),
       decoration: BoxDecoration(
         color: backgroundColor,
         borderRadius: BorderRadius.circular(16),
@@ -69,7 +75,8 @@ class MessageBubble extends ConsumerWidget {
             : null,
       ),
       child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment:
+            isSystemMessage ? CrossAxisAlignment.center : CrossAxisAlignment.start,
         mainAxisSize: MainAxisSize.min,
         children: [
           if (replyPreview != null) ...[
@@ -110,75 +117,82 @@ class MessageBubble extends ConsumerWidget {
           ],
           _buildBody(context, ref, theme),
           const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.center,
-            children: [
-              Expanded(
-                child: Text(
-                  _metadataLabel(),
-                  style: theme.textTheme.labelSmall,
-                ),
-              ),
-              if (onToggleStar != null)
-                IconButton(
-                  tooltip: message.isStarred ? 'Remove star' : 'Star message',
-                  onPressed: onToggleStar,
-                  icon: Icon(
-                    message.isStarred ? Icons.star : Icons.star_border,
-                    size: 18,
-                  ),
-                  visualDensity: VisualDensity.compact,
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 28,
-                    height: 28,
+          if (isSystemMessage)
+            Text(
+              _metadataLabel(),
+              style: theme.textTheme.labelSmall,
+              textAlign: TextAlign.center,
+            )
+          else
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Text(
+                    _metadataLabel(),
+                    style: theme.textTheme.labelSmall,
                   ),
                 ),
-              if (availableActions.isNotEmpty)
-                PopupMenuButton<_MessageBubbleAction>(
-                  key: const ValueKey('message-actions-button'),
-                  tooltip: 'Message actions',
-                  onSelected: (action) {
-                    switch (action) {
-                      case _MessageBubbleAction.edit:
-                        onEdit?.call();
-                      case _MessageBubbleAction.delete:
-                        onDelete?.call(MessageDeleteMode.tombstone);
-                      case _MessageBubbleAction.erase:
-                        onDelete?.call(MessageDeleteMode.hardDelete);
-                    }
-                  },
-                  itemBuilder: (context) {
-                    return [
-                      if (availableActions.contains(_MessageBubbleAction.edit))
-                        const PopupMenuItem<_MessageBubbleAction>(
-                          key: ValueKey('message-action-edit'),
-                          value: _MessageBubbleAction.edit,
-                          child: Text('Edit message'),
-                        ),
-                      if (availableActions.contains(_MessageBubbleAction.delete))
-                        const PopupMenuItem<_MessageBubbleAction>(
-                          key: ValueKey('message-action-delete'),
-                          value: _MessageBubbleAction.delete,
-                          child: Text('Delete for everyone'),
-                        ),
-                      if (availableActions.contains(_MessageBubbleAction.erase))
-                        const PopupMenuItem<_MessageBubbleAction>(
-                          key: ValueKey('message-action-erase'),
-                          value: _MessageBubbleAction.erase,
-                          child: Text('Erase permanently'),
-                        ),
-                    ];
-                  },
-                  padding: EdgeInsets.zero,
-                  constraints: const BoxConstraints.tightFor(
-                    width: 28,
-                    height: 28,
+                if (onToggleStar != null)
+                  IconButton(
+                    tooltip: message.isStarred ? 'Remove star' : 'Star message',
+                    onPressed: onToggleStar,
+                    icon: Icon(
+                      message.isStarred ? Icons.star : Icons.star_border,
+                      size: 18,
+                    ),
+                    visualDensity: VisualDensity.compact,
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 28,
+                      height: 28,
+                    ),
                   ),
-                  iconSize: 18,
-                ),
-            ],
-          ),
+                if (availableActions.isNotEmpty)
+                  PopupMenuButton<_MessageBubbleAction>(
+                    key: const ValueKey('message-actions-button'),
+                    tooltip: 'Message actions',
+                    onSelected: (action) {
+                      switch (action) {
+                        case _MessageBubbleAction.edit:
+                          onEdit?.call();
+                        case _MessageBubbleAction.delete:
+                          onDelete?.call(MessageDeleteMode.tombstone);
+                        case _MessageBubbleAction.erase:
+                          onDelete?.call(MessageDeleteMode.hardDelete);
+                      }
+                    },
+                    itemBuilder: (context) {
+                      return [
+                        if (availableActions.contains(_MessageBubbleAction.edit))
+                          const PopupMenuItem<_MessageBubbleAction>(
+                            key: ValueKey('message-action-edit'),
+                            value: _MessageBubbleAction.edit,
+                            child: Text('Edit message'),
+                          ),
+                        if (availableActions.contains(_MessageBubbleAction.delete))
+                          const PopupMenuItem<_MessageBubbleAction>(
+                            key: ValueKey('message-action-delete'),
+                            value: _MessageBubbleAction.delete,
+                            child: Text('Delete for everyone'),
+                          ),
+                        if (availableActions.contains(_MessageBubbleAction.erase))
+                          const PopupMenuItem<_MessageBubbleAction>(
+                            key: ValueKey('message-action-erase'),
+                            value: _MessageBubbleAction.erase,
+                            child: Text('Erase permanently'),
+                          ),
+                      ];
+                    },
+                    padding: EdgeInsets.zero,
+                    constraints: const BoxConstraints.tightFor(
+                      width: 28,
+                      height: 28,
+                    ),
+                    iconSize: 18,
+                  ),
+              ],
+            ),
           if (!message.isDeleted &&
               (reactionEntries.isNotEmpty || onToggleReaction != null)) ...[
             const SizedBox(height: 8),
@@ -246,6 +260,17 @@ class MessageBubble extends ConsumerWidget {
         style: theme.textTheme.bodyMedium?.copyWith(
           fontStyle: FontStyle.italic,
           color: theme.colorScheme.onSurfaceVariant,
+        ),
+      );
+    }
+
+    if (message.type == MessageType.system) {
+      return Text(
+        message.body,
+        textAlign: TextAlign.center,
+        style: theme.textTheme.bodySmall?.copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontWeight: FontWeight.w600,
         ),
       );
     }
@@ -321,6 +346,9 @@ class MessageBubble extends ConsumerWidget {
 
   String _metadataLabel() {
     final created = _formatTime(message.createdAt);
+    if (message.type == MessageType.system) {
+      return created;
+    }
     final burnLabel = message.burnAfterRead ? 'Burn-after-read' : 'Persistent';
     final status = message.isDeleted
         ? 'deleted'

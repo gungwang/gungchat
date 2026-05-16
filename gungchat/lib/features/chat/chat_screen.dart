@@ -1356,6 +1356,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final voiceMessageService = ref.watch(voiceMessageServiceProvider);
     final networkAsync = ref.watch(networkStatusProvider);
     final peerSession = ref.watch(peerSessionControllerProvider);
+    final mediaCall = ref.watch(mediaCallControllerProvider);
     final selectedContact = ref.watch(selectedContactProvider);
     final blockedContacts = ref.watch(blockedContactsProvider);
     final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
@@ -1391,6 +1392,20 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
         selectedContact == null && !peerSession.isSessionActive;
     final isRecordingVoice = voiceMessageService.isRecording;
     final composerEnabled = !isRecordingVoice;
+    final canStartVideoCall =
+      selectedContact != null &&
+      !isSelectedContactBlocked &&
+      selectedContact.lastKnownAddress != null &&
+      mediaCall.isIdle;
+    final videoCallTooltip = selectedContact == null
+      ? 'Select a contact to start a video call'
+      : isSelectedContactBlocked
+        ? 'Blocked contacts cannot be called'
+        : selectedContact.lastKnownAddress == null
+          ? 'This contact needs a LAN address before you can call them'
+          : mediaCall.isIdle
+            ? 'Start video call'
+            : 'A video call is already in progress';
     final selectedUri = selectedContact?.lastKnownAddress == null
         ? null
         : ref.read(discoveryServiceProvider).buildManualConnectionUri(
@@ -1547,6 +1562,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                     const SizedBox(width: 12),
                     _StateChip(state: peerSession),
+                    const SizedBox(width: 8),
+                    IconButton.filled(
+                      tooltip: videoCallTooltip,
+                      onPressed: canStartVideoCall
+                          ? () async {
+                              try {
+                                await ref
+                                    .read(mediaCallControllerProvider.notifier)
+                                    .startOutgoingCall(selectedContact);
+                              } catch (error) {
+                                _showSnack('Video call could not start: $error');
+                              }
+                            }
+                          : null,
+                      icon: const Icon(Icons.videocam_rounded),
+                    ),
                     const SizedBox(width: 8),
                     IconButton.filledTonal(
                       tooltip: 'Connection details',

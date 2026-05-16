@@ -8,6 +8,7 @@ import '../core/networking/signaling_service.dart';
 import '../features/chat/chat_screen.dart';
 import '../features/chat/lan_signaling_service.dart';
 import '../features/chat/pending_peer_input.dart';
+import '../features/chat/video_call_overlay.dart';
 import '../features/contacts/contacts_screen.dart';
 import '../models/contact.dart';
 import '../preferences/keyboard_shortcut_service.dart';
@@ -116,7 +117,8 @@ class _AppShellState extends ConsumerState<AppShell>
     final signalingEnvelope = ref
         .read(manualSignalingServiceProvider)
         .decode(incomingSignal.signal);
-    final shouldFocusChat = signalingEnvelope.type !=
+    final shouldFocusChat = signalingEnvelope.type.isPeerSessionSignal &&
+      signalingEnvelope.type !=
         SignalingEnvelopeType.iceCandidate;
     if (contact != null) {
       ref.read(selectedContactFingerprintProvider.notifier).state =
@@ -124,6 +126,14 @@ class _AppShellState extends ConsumerState<AppShell>
       if (shouldFocusChat) {
         ref.read(navigationIndexProvider.notifier).state = 0;
       }
+    }
+
+    if (signalingEnvelope.type.isCallSignal) {
+      await ref.read(mediaCallControllerProvider.notifier).applyRemoteSignal(
+            incomingSignal.signal,
+            targetContact: contact ?? ref.read(selectedContactProvider),
+          );
+      return;
     }
 
     await ref.read(peerSessionControllerProvider.notifier).applyRemoteSignal(
@@ -317,6 +327,7 @@ class _AppShellState extends ConsumerState<AppShell>
     final appLockSettings = ref.watch(appLockSettingsProvider);
     final savedContacts = ref.watch(contactBookProvider);
     final selectedContact = ref.watch(selectedContactProvider);
+    final mediaCall = ref.watch(mediaCallControllerProvider);
     final shortcuts = ref.watch(keyboardShortcutServiceProvider).shortcuts;
 
     ref.listen<AppLockSettings>(appLockSettingsProvider, (previous, next) {
@@ -440,6 +451,7 @@ class _AppShellState extends ConsumerState<AppShell>
                   ],
                 ),
               ),
+              if (mediaCall.hasOverlay) const Positioned.fill(child: VideoCallOverlay()),
               if (appLockSettings.enabled && (_isAppLocked || _isUnlocking))
                 Positioned.fill(
                   child: _AppLockOverlay(
