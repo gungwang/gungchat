@@ -7,7 +7,8 @@ enum CallType {
 
 enum CallStatus {
   idle,
-  ringing,
+  outgoing,
+  incoming,
   connecting,
   connected,
   ended,

@@ -81,6 +81,16 @@ class ShareableSignal {
         return 'Answer';
       case SignalingEnvelopeType.iceCandidate:
         return 'ICE';
+      case SignalingEnvelopeType.callOffer:
+        return 'Call Offer';
+      case SignalingEnvelopeType.callAnswer:
+        return 'Call Answer';
+      case SignalingEnvelopeType.callIceCandidate:
+        return 'Call ICE';
+      case SignalingEnvelopeType.callDecline:
+        return 'Call Decline';
+      case SignalingEnvelopeType.callHangup:
+        return 'Call Hangup';
     }
   }
 }
@@ -355,6 +365,14 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
           await _applyRemoteAnswer(envelope, rawSignal: trimmed);
         case SignalingEnvelopeType.iceCandidate:
           await _applyRemoteIceCandidate(envelope, rawSignal: trimmed);
+        case SignalingEnvelopeType.callOffer:
+        case SignalingEnvelopeType.callAnswer:
+        case SignalingEnvelopeType.callIceCandidate:
+        case SignalingEnvelopeType.callDecline:
+        case SignalingEnvelopeType.callHangup:
+          throw const FormatException(
+            'Video call signaling must be handled by the media call controller.',
+          );
       }
     } catch (error) {
       _setError('Could not apply the remote signal: $error');
@@ -1194,6 +1212,12 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
           );
         case SignalingEnvelopeType.iceCandidate:
           break;
+        case SignalingEnvelopeType.callOffer:
+        case SignalingEnvelopeType.callAnswer:
+        case SignalingEnvelopeType.callIceCandidate:
+        case SignalingEnvelopeType.callDecline:
+        case SignalingEnvelopeType.callHangup:
+          break;
       }
     } catch (error) {
       if (state.sessionId != envelope.sessionId) {
@@ -1232,6 +1256,16 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         return 'answer';
       case SignalingEnvelopeType.iceCandidate:
         return 'ICE payload';
+      case SignalingEnvelopeType.callOffer:
+        return 'call offer';
+      case SignalingEnvelopeType.callAnswer:
+        return 'call answer';
+      case SignalingEnvelopeType.callIceCandidate:
+        return 'call ICE payload';
+      case SignalingEnvelopeType.callDecline:
+        return 'call decline';
+      case SignalingEnvelopeType.callHangup:
+        return 'call hangup';
     }
   }
 
@@ -1508,6 +1542,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       SignalingEnvelopeType.offer => 'Offer',
       SignalingEnvelopeType.answer => 'Answer',
       SignalingEnvelopeType.iceCandidate => 'ICE',
+      SignalingEnvelopeType.callOffer => 'Call Offer',
+      SignalingEnvelopeType.callAnswer => 'Call Answer',
+      SignalingEnvelopeType.callIceCandidate => 'Call ICE',
+      SignalingEnvelopeType.callDecline => 'Call Decline',
+      SignalingEnvelopeType.callHangup => 'Call Hangup',
     };
 
     return PeerSessionHistoryAction(

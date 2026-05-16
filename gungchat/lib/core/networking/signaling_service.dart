@@ -6,6 +6,30 @@ enum SignalingEnvelopeType {
   offer,
   answer,
   iceCandidate,
+  callOffer,
+  callAnswer,
+  callIceCandidate,
+  callDecline,
+  callHangup,
+}
+
+extension SignalingEnvelopeTypeX on SignalingEnvelopeType {
+  bool get isPeerSessionSignal {
+    switch (this) {
+      case SignalingEnvelopeType.offer:
+      case SignalingEnvelopeType.answer:
+      case SignalingEnvelopeType.iceCandidate:
+        return true;
+      case SignalingEnvelopeType.callOffer:
+      case SignalingEnvelopeType.callAnswer:
+      case SignalingEnvelopeType.callIceCandidate:
+      case SignalingEnvelopeType.callDecline:
+      case SignalingEnvelopeType.callHangup:
+        return false;
+    }
+  }
+
+  bool get isCallSignal => !isPeerSessionSignal;
 }
 
 @immutable

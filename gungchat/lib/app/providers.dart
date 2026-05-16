@@ -27,6 +27,7 @@ import '../features/chat/presence_status.dart';
 import '../features/chat/peer_session_controller.dart';
 import '../features/chat/voice_message_service.dart';
 import '../features/chat/link_preview_service.dart';
+import '../features/chat/media_call_controller.dart';
 import '../features/contacts/contact_book_controller.dart';
 import '../features/contacts/contact_book_storage.dart';
 import '../features/contacts/contact_exchange_service.dart';
@@ -343,6 +344,39 @@ final lanSignalingServiceProvider = Provider<LanSignalingService>((ref) {
   );
   ref.onDispose(service.dispose);
   return service;
+});
+
+final mediaCallControllerProvider =
+    StateNotifierProvider<MediaCallController, MediaCallState>((ref) {
+  final controller = MediaCallController(
+    iceManager: ref.watch(iceManagerProvider),
+    signalingService: ref.watch(manualSignalingServiceProvider),
+    loadMessageService: () => ref.read(messageServiceProvider.future),
+    loadLocalSenderId: () async {
+      final identity = await ref.read(keyManagerProvider).getOrCreateIdentity();
+      return identity.fingerprint;
+    },
+    refreshConversation: (conversationId) {
+      ref.invalidate(conversationMessagesProvider(conversationId));
+    },
+    dispatchLocalSignal: ({
+      required encodedSignal,
+      required targetAddress,
+    }) async {
+      final identity = await ref.read(keyManagerProvider).getOrCreateIdentity();
+      await ref.read(lanSignalingServiceProvider).sendSignal(
+            encodedSignal: encodedSignal,
+            targetAddress: targetAddress,
+            identity: identity,
+            displayName:
+                ref.read(contactExchangeServiceProvider).defaultDisplayName(
+                      identity,
+                    ),
+          );
+    },
+  );
+  ref.onDispose(controller.dispose);
+  return controller;
 });
 
 final peerSessionControllerProvider =
