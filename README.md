@@ -5,7 +5,8 @@
 
 [![Flutter](https://img.shields.io/badge/Flutter-3.24%2B-02569B?logo=flutter&logoColor=white)](https://flutter.dev)
 [![Platforms](https://img.shields.io/badge/Platforms-Windows%20%7C%20Android%20%7C%20iOS-0A7E8C)](#major-features)
-[![Version](https://img.shields.io/badge/Version-2.0.3-2D7D46)](gungchat/pubspec.yaml)
+
+
 
 Privacy-first peer-to-peer messaging built with Flutter.
 
@@ -126,3 +127,6 @@ We especially need help with:
 - WebRTC and peer connectivity debugging
 
 If you want to help, please open an issue or send a pull request.
+
+
+[![QR code](./QR-code-2.0.27.jpg)]
