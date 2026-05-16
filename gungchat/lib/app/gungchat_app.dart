@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../l10n/app_localizations.dart';
+import '../l10n/l10n.dart';
 import 'app_shell.dart';
 import 'providers.dart';
 
@@ -10,11 +12,13 @@ class GungChatApp extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final locale = ref.watch(appLocaleProvider);
     final themeMode = ref.watch(themeModeProvider);
 
     return MaterialApp(
-      title: 'GungChat',
+      onGenerateTitle: (context) => context.l10n.appTitle,
       debugShowCheckedModeBanner: false,
+      locale: locale,
       themeMode: themeMode,
       theme: ThemeData(
         colorScheme: ColorScheme.fromSeed(seedColor: const Color(0xFF185ADB)),
@@ -27,11 +31,9 @@ class GungChatApp extends ConsumerWidget {
         ),
         useMaterial3: true,
       ),
-      supportedLocales: const [
-        Locale('en'),
-        Locale('zh', 'CN'),
-      ],
+      supportedLocales: AppLocalizations.supportedLocales,
       localizationsDelegates: const [
+        AppLocalizations.delegate,
         GlobalMaterialLocalizations.delegate,
         GlobalWidgetsLocalizations.delegate,
         GlobalCupertinoLocalizations.delegate,

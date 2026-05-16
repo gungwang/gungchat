@@ -7,6 +7,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../app/providers.dart';
 import '../../core/encryption/key_manager.dart';
+import '../../l10n/l10n.dart';
 import '../../models/contact.dart';
 import '../../organization/label_service.dart';
 import '../chat/peer_connect_intent.dart';
@@ -43,10 +44,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
   }
 
   Future<void> _scanContactPayload() async {
+    final l10n = context.l10n;
     if (!_supportsQrScanning) {
-      _showSnack(
-        'QR scanning is not available on Windows. Use another GungChat device with a camera to scan this code.',
-      );
+      _showSnack(l10n.scanQrNotAvailableOnWindows);
       return;
     }
 
@@ -67,9 +67,10 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
     String payload, {
     bool trustImmediately = false,
   }) async {
+    final l10n = context.l10n;
     final normalizedPayload = payload.trim();
     if (normalizedPayload.isEmpty) {
-      _showSnack('Scan a GungChat QR code before trying to connect.');
+      _showSnack(l10n.scanDeviceBeforeConnect);
       return;
     }
 
@@ -86,20 +87,18 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       ref.read(contactBookProvider.notifier).addOrUpdate(contact);
 
       if (contact.lastKnownAddress == null) {
-        _showSnack(
-          'This QR code does not include a usable LAN address yet. Open the QR page on the other device again and rescan it.',
-        );
+        _showSnack(l10n.qrMissingLanAddress);
         return;
       }
 
       _startConnectFlow(contact.fingerprint);
       _showSnack(
         trustImmediately
-            ? 'Trusted ${contactCard.displayName}. Connecting automatically over LAN.'
-            : 'Connecting automatically to ${contactCard.displayName}.',
+            ? '${l10n.trustedConnectingLabel} ${contactCard.displayName}'
+            : '${l10n.connectingAutomaticallyLabel} ${contactCard.displayName}',
       );
     } catch (error) {
-      _showSnack('QR connection failed: $error');
+      _showSnack('${l10n.qrConnectionFailedLabel}: $error');
     }
   }
 
@@ -110,7 +109,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
 
   void _startConnectFlow(String fingerprint) {
     if (ref.read(blockedContactsProvider).contains(fingerprint)) {
-      _showSnack('Blocked contacts cannot start a peer session.');
+      _showSnack(context.l10n.blockedContactsCannotStartSession);
       return;
     }
 
@@ -135,6 +134,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final identityAsync = ref.watch(deviceIdentityProvider);
     final savedContacts = ref.watch(contactBookProvider);
     final blockedContacts = ref.watch(blockedContactsProvider);
@@ -145,23 +145,22 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          Text('Discovery', style: theme.textTheme.headlineSmall),
+          Text(l10n.discoveryTitle, style: theme.textTheme.headlineSmall),
           const SizedBox(height: 8),
-          const Text(
-            'Scan once to establish trust. After the first QR exchange, both devices can reconnect with one tap.',
-          ),
+          Text(l10n.discoverySubtitle),
           if (selectedContact != null) ...[
             const SizedBox(height: 16),
             Card(
               child: ListTile(
                 leading: const Icon(Icons.chat_bubble_outline),
-                title:
-                    Text('Active chat target: ${selectedContact.displayName}'),
+                title: Text(
+                  '${l10n.activeChatTargetLabel}: ${selectedContact.displayName}',
+                ),
                 subtitle: Text(selectedContact.fingerprint),
                 trailing: FilledButton.tonal(
                   onPressed: () =>
                       _openContactInChat(selectedContact.fingerprint),
-                  child: const Text('Open'),
+                  child: Text(l10n.openAction),
                 ),
               ),
             ),
@@ -178,19 +177,17 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Your Connect QR',
+                    l10n.yourConnectQrTitle,
                     style: theme.textTheme.titleMedium,
                   ),
                   const SizedBox(height: 4),
-                  const Text(
-                    'Open this page on the other device and scan this QR code. GungChat will exchange identities and connect automatically over LAN.',
-                  ),
+                  Text(l10n.yourConnectQrHelp),
                   const SizedBox(height: 12),
                   TextField(
                     controller: _displayNameController,
-                    decoration: const InputDecoration(
-                      labelText: 'Display name',
-                      border: OutlineInputBorder(),
+                    decoration: InputDecoration(
+                      labelText: l10n.displayNameLabel,
+                      border: const OutlineInputBorder(),
                     ),
                   ),
                   const SizedBox(height: 12),
@@ -211,7 +208,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                           }
                           if (snapshot.hasError || !snapshot.hasData) {
                             return Text(
-                              'Contact card unavailable: ${snapshot.error}',
+                              '${l10n.contactCardUnavailableLabel}: ${snapshot.error}',
                             );
                           }
 
@@ -223,12 +220,12 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                           return Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('Fingerprint: ${card.fingerprint}'),
+                              Text('${l10n.fingerprintLabel}: ${card.fingerprint}'),
                               const SizedBox(height: 8),
                               Text(
                                 card.addresses.isEmpty
-                                    ? 'No LAN addresses detected yet.'
-                                    : 'LAN addresses: ${card.addresses.join(', ')}',
+                                    ? l10n.noLanAddressesDetected
+                                    : '${l10n.lanAddressesLabel}: ${card.addresses.join(', ')}',
                               ),
                               const SizedBox(height: 16),
                               Center(
@@ -265,7 +262,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                                   borderRadius: BorderRadius.circular(12),
                                 ),
                                 child: Text(
-                                  'Keep this QR visible until the other device finishes scanning and starts connecting.',
+                                    l10n.keepQrVisibleHint,
                                   style: theme.textTheme.bodyMedium,
                                 ),
                               ),
@@ -276,7 +273,7 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                     },
                     loading: () => const LinearProgressIndicator(),
                     error: (error, stackTrace) =>
-                        Text('Identity unavailable: $error'),
+                        Text('${l10n.identityUnavailableLabel}: $error'),
                   ),
                 ],
               ),
@@ -290,14 +287,14 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Scan Peer QR',
+                    l10n.scanPeerQrTitle,
                     style: theme.textTheme.titleMedium,
                   ),
                   const SizedBox(height: 4),
                   Text(
                     _supportsQrScanning
-                        ? 'Use this device camera to scan the other GungChat QR code. The first scan creates a trusted connection automatically.'
-                        : 'This device cannot scan QR codes. Use another GungChat device with a camera to scan this QR code and complete the first trust exchange.',
+                        ? l10n.scanPeerQrCameraHelp
+                        : l10n.scanPeerQrDesktopHelp,
                   ),
                   const SizedBox(height: 16),
                   FilledButton.icon(
@@ -305,8 +302,8 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                     icon: const Icon(Icons.qr_code_scanner),
                     label: Text(
                       _supportsQrScanning
-                          ? 'Scan QR and Connect'
-                          : 'Scan on Another Device',
+                          ? l10n.scanQrAndConnectAction
+                          : l10n.scanOnAnotherDeviceAction,
                     ),
                   ),
                 ],
@@ -321,14 +318,12 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Saved Contacts',
+                    l10n.savedContactsTitle,
                     style: theme.textTheme.titleMedium,
                   ),
                   const SizedBox(height: 12),
                   if (savedContacts.isEmpty)
-                    const Text(
-                      'Trusted devices appear here after the first QR scan.',
-                    )
+                    Text(l10n.savedContactsEmpty)
                   else
                     Column(
                       children: [
@@ -356,7 +351,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                               await ref
                                 .read(blockedContactsProvider.notifier)
                                 .unblockContact(contact.fingerprint);
-                              _showSnack('Unblocked ${contact.displayName}.');
+                              _showSnack(
+                                '${l10n.unblockedLabel} ${contact.displayName}.',
+                              );
                               } else {
                               await ref
                                 .read(blockedContactsProvider.notifier)
@@ -371,7 +368,9 @@ class _ContactsScreenState extends ConsumerState<ContactsScreen> {
                                   .read(peerSessionControllerProvider.notifier)
                                   .resetSession();
                               }
-                              _showSnack('Blocked ${contact.displayName}.');
+                              _showSnack(
+                                '${l10n.blockedLabel} ${contact.displayName}.',
+                              );
                               }
                             },
                           ),
@@ -425,6 +424,7 @@ class _ContactOrganizationCardState
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final contactId = widget.contact.fingerprint;
     final allLabelsAsync = ref.watch(allConversationLabelsProvider);
     final selectedLabelsAsync = ref.watch(conversationLabelsProvider(contactId));
@@ -438,13 +438,13 @@ class _ContactOrganizationCardState
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-            'Organization',
+            l10n.organizationTitle,
             style: theme.textTheme.titleMedium,
           ),
           const SizedBox(height: 4),
-          Text('Manage labels, private notes, and notification state for this contact.'),
+          Text(l10n.organizationSubtitle),
           const SizedBox(height: 16),
-          Text('Labels', style: theme.textTheme.titleSmall),
+          Text(l10n.labelsTitle, style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
           allLabelsAsync.when(
             data: (allLabels) {
@@ -458,7 +458,7 @@ class _ContactOrganizationCardState
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       if (allLabels.isEmpty)
-                        const Text('No labels created yet.')
+                        Text(l10n.noLabelsCreatedYet)
                       else
                         Wrap(
                           spacing: 8,
@@ -488,9 +488,9 @@ class _ContactOrganizationCardState
                           Expanded(
                             child: TextField(
                               controller: _labelController,
-                              decoration: const InputDecoration(
-                                border: OutlineInputBorder(),
-                                labelText: 'New label',
+                              decoration: InputDecoration(
+                                border: const OutlineInputBorder(),
+                                labelText: l10n.newLabelLabel,
                               ),
                             ),
                           ),
@@ -542,21 +542,21 @@ class _ContactOrganizationCardState
                                   child: CircularProgressIndicator(strokeWidth: 2),
                                 )
                               : const Icon(Icons.add),
-                          label: const Text('Create label'),
+                          label: Text(l10n.createLabelAction),
                         ),
                       ),
                     ],
                   );
                 },
                 loading: () => const LinearProgressIndicator(),
-                error: (error, _) => Text('Could not load selected labels: $error'),
+                error: (error, _) => Text('${l10n.labelsTitle}: $error'),
               );
             },
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Could not load labels: $error'),
+            error: (error, _) => Text('${l10n.labelsTitle}: $error'),
           ),
           const SizedBox(height: 16),
-          Text('Private notes', style: theme.textTheme.titleSmall),
+          Text(l10n.privateNotesTitle, style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
           notesAsync.when(
             data: (notes) {
@@ -564,15 +564,15 @@ class _ContactOrganizationCardState
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   if (notes.isEmpty)
-                    const Text('No private notes for this contact yet.')
+                    Text(l10n.noPrivateNotesYet)
                   else
                     for (final note in notes)
                       ListTile(
                         contentPadding: EdgeInsets.zero,
                         title: Text(note.content),
-                        subtitle: Text('Updated ${note.updatedAt}'),
+                        subtitle: Text('${l10n.updatedLabel} ${note.updatedAt}'),
                         trailing: IconButton(
-                          tooltip: 'Delete note',
+                          tooltip: l10n.deleteNoteTooltip,
                           onPressed: () => unawaited(_deleteNote(note.id)),
                           icon: const Icon(Icons.delete_outline),
                         ),
@@ -581,9 +581,9 @@ class _ContactOrganizationCardState
                     controller: _noteController,
                     minLines: 2,
                     maxLines: 4,
-                    decoration: const InputDecoration(
-                      border: OutlineInputBorder(),
-                      labelText: 'Add private note',
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: l10n.addPrivateNoteLabel,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -598,27 +598,27 @@ class _ContactOrganizationCardState
                               child: CircularProgressIndicator(strokeWidth: 2),
                             )
                           : const Icon(Icons.note_add_outlined),
-                      label: const Text('Save note'),
+                      label: Text(l10n.saveNoteAction),
                     ),
                   ),
                 ],
               );
             },
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Could not load notes: $error'),
+            error: (error, _) => Text('${l10n.privateNotesTitle}: $error'),
           ),
           const SizedBox(height: 16),
-          Text('Notifications', style: theme.textTheme.titleSmall),
+          Text(l10n.notificationsTitle, style: theme.textTheme.titleSmall),
           const SizedBox(height: 8),
           muteStateAsync.when(
             data: (settings) {
               final now = DateTime.now();
               final isSnoozed = settings.isSnoozedAt(now);
               final statusText = settings.muted
-                  ? 'Muted until you manually unmute it.'
+                  ? l10n.mutedUntilManualUnmute
                   : isSnoozed
-                      ? 'Snoozed until ${settings.snoozedUntil}. '
-                      : 'Notifications are active for this contact.';
+                      ? '${l10n.snoozedUntilLabel} ${settings.snoozedUntil}.'
+                      : l10n.notificationsActiveForContact;
 
               return Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -632,22 +632,22 @@ class _ContactOrganizationCardState
                       FilledButton.tonalIcon(
                         onPressed: settings.muted ? null : _muteContact,
                         icon: const Icon(Icons.notifications_off_outlined),
-                        label: const Text('Mute'),
+                        label: Text(l10n.muteAction),
                       ),
                       FilledButton.tonalIcon(
                         onPressed: _unmuteContact,
                         icon: const Icon(Icons.notifications_active_outlined),
-                        label: const Text('Unmute'),
+                        label: Text(l10n.unmuteAction),
                       ),
                       FilledButton.tonalIcon(
                         onPressed: () => _snoozeContact(const Duration(hours: 1)),
                         icon: const Icon(Icons.snooze_outlined),
-                        label: const Text('Snooze 1h'),
+                        label: Text(l10n.snooze1hAction),
                       ),
                       FilledButton.tonalIcon(
                         onPressed: () => _snoozeContact(const Duration(hours: 8)),
                         icon: const Icon(Icons.bedtime_outlined),
-                        label: const Text('Snooze 8h'),
+                        label: Text(l10n.snooze8hAction),
                       ),
                     ],
                   ),
@@ -655,7 +655,7 @@ class _ContactOrganizationCardState
               );
             },
             loading: () => const LinearProgressIndicator(),
-            error: (error, _) => Text('Could not load mute settings: $error'),
+            error: (error, _) => Text('${l10n.notificationsTitle}: $error'),
           ),
         ],
       ),
@@ -785,6 +785,7 @@ class _SavedContactTile extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final isTrusted = contact.trustLevel == ContactTrustLevel.verified;
     final canConnect =
         !isBlocked && isTrusted && contact.lastKnownAddress != null;
@@ -800,9 +801,9 @@ class _SavedContactTile extends StatelessWidget {
                 style: Theme.of(context).textTheme.titleSmall,
               ),
             ),
-            if (isTrusted) const Chip(label: Text('Trusted')),
-            if (isBlocked) const Chip(label: Text('Blocked')),
-            if (isSelected) const Chip(label: Text('Selected')),
+            if (isTrusted) Chip(label: Text(l10n.trustedChip)),
+            if (isBlocked) Chip(label: Text(l10n.blockedChip)),
+            if (isSelected) Chip(label: Text(l10n.selectedChip)),
           ],
         ),
         const SizedBox(height: 4),
@@ -813,7 +814,7 @@ class _SavedContactTile extends StatelessWidget {
         ],
         if (contact.lastSeenAt != null) ...[
           const SizedBox(height: 4),
-          Text('Seen ${contact.lastSeenAt}'),
+          Text('${l10n.seenLabel} ${contact.lastSeenAt}'),
         ],
         const SizedBox(height: 12),
         Wrap(
@@ -821,33 +822,33 @@ class _SavedContactTile extends StatelessWidget {
           runSpacing: 8,
           children: [
             if (contact.isLanDiscovered)
-              const Chip(label: Text('LAN discovered')),
-            if (!isTrusted) const Chip(label: Text('Scan QR first')),
+              Chip(label: Text(l10n.lanDiscoveredChip)),
+            if (!isTrusted) Chip(label: Text(l10n.scanQrFirstChip)),
             FilledButton.tonalIcon(
               onPressed: onManage,
               icon: const Icon(Icons.label_outline),
-              label: const Text('Manage'),
+              label: Text(l10n.manageAction),
             ),
             FilledButton.tonalIcon(
               onPressed: onOpenChat,
               icon: const Icon(Icons.chat_bubble_outline),
-              label: const Text('Open In Chat'),
+              label: Text(l10n.openInChatAction),
             ),
             FilledButton.icon(
               onPressed: canConnect ? onConnect : null,
               icon: const Icon(Icons.wifi_tethering_outlined),
               label: Text(
                 isBlocked
-                    ? 'Blocked'
+                    ? l10n.blockedChip
                     : canConnect
-                        ? 'Connect'
-                        : 'Needs QR',
+                        ? l10n.connectAction
+                        : l10n.needsQrAction,
               ),
             ),
             FilledButton.tonalIcon(
               onPressed: onToggleBlocked,
               icon: Icon(isBlocked ? Icons.lock_open : Icons.block),
-              label: Text(isBlocked ? 'Unblock' : 'Block'),
+              label: Text(isBlocked ? l10n.unblockAction : l10n.blockAction),
             ),
           ],
         ),

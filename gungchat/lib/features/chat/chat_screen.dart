@@ -12,6 +12,7 @@ import '../../app/providers.dart';
 import '../../commands/slash_command_registry.dart';
 import '../../core/accessibility/a11y_helper.dart';
 import '../../core/encryption/key_manager.dart';
+import '../../l10n/l10n.dart';
 import '../../core/networking/network_monitor.dart';
 import '../../core/networking/webrtc_manager.dart';
 import '../../core/text/spoiler_renderer.dart';
@@ -1350,6 +1351,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     ref.listen<PendingPeerInput?>(pendingPeerInputProvider, (previous, next) {
       if (next == null) {
         return;
@@ -1413,14 +1415,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       selectedContact.lastKnownAddress != null &&
       mediaCall.isIdle;
     final videoCallTooltip = selectedContact == null
-      ? 'Select a contact to start a video call'
+      ? l10n.selectContactToStartVideoCall
       : isSelectedContactBlocked
-        ? 'Blocked contacts cannot be called'
+        ? l10n.blockedContactsCannotBeCalled
         : selectedContact.lastKnownAddress == null
-          ? 'This contact needs a LAN address before you can call them'
+          ? l10n.contactNeedsLanBeforeCall
           : mediaCall.isIdle
-            ? 'Start video call'
-            : 'A video call is already in progress';
+            ? l10n.startVideoCallTooltip
+            : l10n.videoCallAlreadyInProgress;
     final selectedUri = selectedContact?.lastKnownAddress == null
         ? null
         : ref.read(discoveryServiceProvider).buildManualConnectionUri(
@@ -1448,14 +1450,14 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final quickReplyMatchesAsync = quickReplyLookupPrefix == null
       ? null
       : ref.watch(quickReplyMatchesProvider(quickReplyLookupPrefix));
-    final conversationTitle = selectedContact?.displayName ?? 'Bootstrap';
+    final conversationTitle = selectedContact?.displayName ?? l10n.appTitle;
     final sessionSummary = canSendSecure
-        ? 'Secure channel open'
+      ? l10n.secureChannelOpen
         : selectedContact == null
-            ? 'Choose a contact from Contacts'
+        ? l10n.chooseContactFromContacts
             : isSelectedContactBlocked
-                ? '${selectedContact.displayName} is blocked'
-                : 'Ready to connect';
+          ? '${selectedContact.displayName} ${l10n.isBlockedSuffix}'
+          : l10n.readyToConnect;
 
     Future<void> showSessionDetails() async {
       await showModalBottomSheet<void>(
@@ -1472,7 +1474,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   children: [
                     Expanded(
                       child: Text(
-                        'Connection Details',
+                        l10n.connectionDetailsTitle,
                         style: theme.textTheme.titleLarge,
                       ),
                     ),
@@ -1558,7 +1560,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            selectedContact?.displayName ?? 'GungChat',
+                            conversationTitle,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: theme.textTheme.headlineSmall,
@@ -1587,7 +1589,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     .read(mediaCallControllerProvider.notifier)
                                     .startOutgoingCall(selectedContact);
                               } catch (error) {
-                                _showSnack('Video call could not start: $error');
+                                _showSnack('${l10n.videoCallCouldNotStartLabel}: $error');
                               }
                             }
                           : null,
@@ -1595,7 +1597,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     ),
                     const SizedBox(width: 8),
                     IconButton.filledTonal(
-                      tooltip: 'Connection details',
+                      tooltip: l10n.connectionDetailsTooltip,
                       onPressed: showSessionDetails,
                       icon: const Icon(Icons.tune_outlined),
                     ),
@@ -1632,8 +1634,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           child: Text(
                             selectedContact == null &&
                                     peerSession.conversationId == null
-                                ? 'No messages yet. Save a local bootstrap message or select a peer contact.'
-                                : 'No messages yet for this peer. Finish signaling to start the secure conversation.',
+                                ? l10n.noMessagesYetBootstrap
+                                : l10n.noMessagesYetPeer,
                             style: theme.textTheme.bodyMedium,
                             textAlign: TextAlign.center,
                           ),
@@ -1662,7 +1664,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     loading: () =>
                         const Center(child: CircularProgressIndicator()),
                     error: (error, stackTrace) {
-                      return Center(child: Text('Message load failed: $error'));
+                      return Center(
+                        child: Text('${l10n.messageLoadFailedLabel}: $error'),
+                      );
                     },
                       ),
                     ),
@@ -1680,33 +1684,33 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                   children: [
                     Text(
                       canSendSecure
-                          ? 'Conversation: ${peerSession.remoteFingerprint ?? activeConversationId}'
+                          ? '${l10n.conversationLabel}: ${peerSession.remoteFingerprint ?? activeConversationId}'
                           : selectedContact != null
-                              ? 'Conversation: ${selectedContact.displayName}'
+                              ? '${l10n.conversationLabel}: ${selectedContact.displayName}'
                               : canSaveLocal
-                                  ? 'Conversation: local bootstrap cache'
-                                  : 'Conversation: waiting for secure channel',
+                                  ? '${l10n.conversationLabel}: ${l10n.localBootstrapCache}'
+                                  : '${l10n.conversationLabel}: ${l10n.waitingForSecureChannel}',
                       style: theme.textTheme.labelLarge,
                     ),
                     if (peerSession.remoteStatusText != null &&
                         peerSession.remoteStatusText!.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Peer custom status: ${peerSession.remoteStatusText!}',
+                        '${l10n.peerCustomStatusLabel}: ${peerSession.remoteStatusText!}',
                         style: theme.textTheme.bodySmall,
                       ),
                     ],
                     if (customStatusText.isNotEmpty) ...[
                       const SizedBox(height: 4),
                       Text(
-                        'Your custom status: $customStatusText',
+                        '${l10n.yourCustomStatusLabel}: $customStatusText',
                         style: theme.textTheme.bodySmall,
                       ),
                     ],
                     if (isConversationBlocked) ...[
                       const SizedBox(height: 8),
                       Text(
-                        'This contact is blocked. Unblock them in Contacts before continuing peer messaging.',
+                        l10n.blockedContactWarning,
                         style: theme.textTheme.bodySmall?.copyWith(
                           color: theme.colorScheme.error,
                         ),
@@ -1730,8 +1734,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                   children: [
                                     Text(
                                       replyingToMessage.isOutgoing
-                                          ? 'Replying to yourself'
-                                          : 'Replying to peer',
+                                          ? l10n.replyingToYourself
+                                          : l10n.replyingToPeer,
                                       style: theme.textTheme.labelLarge,
                                     ),
                                     const SizedBox(height: 4),
@@ -1745,7 +1749,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 ),
                               ),
                               IconButton(
-                                tooltip: 'Cancel reply',
+                                tooltip: l10n.cancelReplyTooltip,
                                 onPressed: _clearReplyTarget,
                                 icon: const Icon(Icons.close),
                               ),
