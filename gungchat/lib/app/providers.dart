@@ -41,6 +41,7 @@ import '../preferences/locale_service.dart';
 import '../preferences/notification_prefs_service.dart';
 import '../preferences/theme_service.dart';
 import '../features/settings/app_lock_preferences.dart';
+import '../features/settings/burn_after_read_delay_preferences.dart';
 import '../features/settings/custom_status_preferences.dart';
 import '../features/settings/presence_preferences.dart';
 import '../features/settings/read_receipt_preferences.dart';
@@ -68,6 +69,10 @@ final pendingPeerConnectIntentProvider =
 final readReceiptPreferencesStorageProvider =
     Provider<ReadReceiptPreferencesStorage>((ref) {
   return const ReadReceiptPreferencesStorage();
+});
+final burnAfterReadDelayPreferencesStorageProvider =
+    Provider<BurnAfterReadDelayPreferencesStorage>((ref) {
+  return const BurnAfterReadDelayPreferencesStorage();
 });
 final presencePreferencesStorageProvider =
     Provider<PresencePreferencesStorage>((ref) {
@@ -102,6 +107,14 @@ final readReceiptsEnabledProvider =
     storage: ref.watch(readReceiptPreferencesStorageProvider),
   );
 });
+final burnAfterReadDelayProvider =
+    StateNotifierProvider<BurnAfterReadDelayPreferenceController, Duration>((
+      ref,
+    ) {
+      return BurnAfterReadDelayPreferenceController(
+        storage: ref.watch(burnAfterReadDelayPreferencesStorageProvider),
+      );
+    });
 final localPresenceStatusProvider =
     StateNotifierProvider<PresencePreferenceController, PeerPresenceStatus>(
         (ref) {
@@ -425,6 +438,7 @@ final peerSessionControllerProvider =
     isBlockedFingerprint: (fingerprint) {
       return ref.read(blockedContactsProvider).contains(fingerprint);
     },
+    loadBurnAfterReadDelay: () => ref.read(burnAfterReadDelayProvider),
   );
   ref.onDispose(controller.dispose);
   return controller;

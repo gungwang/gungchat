@@ -498,6 +498,34 @@ class AppLocalizationsEs extends AppLocalizations {
       'El flujo inicial del chat ya asume mensajería efímera por defecto.';
 
   @override
+  String get burnAfterReadDelayLabel => 'Retraso de borrado tras leer';
+
+  @override
+  String get burnAfterReadDelayHelp =>
+      'Cuánto tiempo permanecen visibles los mensajes de borrar tras leer después de marcarse como leídos.';
+
+  @override
+  String get burnAfterReadDelayImmediate => 'De inmediato';
+
+  @override
+  String get burnAfterReadDelay5Seconds => '5 segundos';
+
+  @override
+  String get burnAfterReadDelay10Seconds => '10 segundos';
+
+  @override
+  String get burnAfterReadDelay30Seconds => '30 segundos';
+
+  @override
+  String get burnAfterReadDelay1Minute => '1 minuto';
+
+  @override
+  String get burnAfterReadDelay5Minutes => '5 minutos';
+
+  @override
+  String get burnAfterReadDelay10Minutes => '10 minutos';
+
+  @override
   String get antiSurveillanceGuardTitle => 'Guardia antivigilancia';
 
   @override
@@ -539,6 +567,190 @@ class AppLocalizationsEs extends AppLocalizations {
 
   @override
   String get connectionDetailsTooltip => 'Detalles de conexión';
+
+  @override
+  String get connectionStateOpen => 'Abierto';
+
+  @override
+  String get connectionStateConnecting => 'Conectando';
+
+  @override
+  String get connectionStateFailed => 'Falló';
+
+  @override
+  String get connectionStateOffline => 'Sin conexión';
+
+  @override
+  String get connectionStateClosed => 'Cerrado';
+
+  @override
+  String get connectionStateIdle => 'Inactivo';
+
+  @override
+  String get connectionDetailsDeviceIdentityTitle =>
+      'Identidad del dispositivo';
+
+  @override
+  String get connectionDetailsIdentityDescription =>
+      'El material de clave X25519 se genera una vez y se conserva en el almacenamiento seguro.';
+
+  @override
+  String connectionDetailsIdentityBootstrapFailed(Object error) {
+    return 'Error al inicializar la identidad: $error';
+  }
+
+  @override
+  String get connectionDetailsNetworkPolicyTitle => 'Política de red';
+
+  @override
+  String get connectionDetailsNetworkLanPreferred => 'LAN preferida';
+
+  @override
+  String get connectionDetailsNetworkMobileData => 'Datos móviles';
+
+  @override
+  String get connectionDetailsNetworkConnected => 'Conectado';
+
+  @override
+  String get connectionDetailsNetworkLanDescription =>
+      'El enrutamiento LAN está disponible y debería preferirse para las sesiones P2P.';
+
+  @override
+  String get connectionDetailsNetworkFallbackDescription =>
+      'Se puede añadir después una IP manual y un respaldo TURN sobre este monitor.';
+
+  @override
+  String connectionDetailsNetworkMonitorFailed(Object error) {
+    return 'Error del monitor de red: $error';
+  }
+
+  @override
+  String get manualPeerSessionTitle => 'Sesión P2P manual';
+
+  @override
+  String get manualPeerSessionNoSelectionSubtitle =>
+      'Selecciona un contacto o pega una oferta remota para responder manualmente';
+
+  @override
+  String get manualPeerSessionInviteImportedSubtitle =>
+      'Invitación importada. Copia el paquete de respuesta o sigue intercambiando la respuesta sin procesar y las cargas ICE.';
+
+  @override
+  String get manualPeerSessionExchangePayloadsSubtitle =>
+      'Intercambia oferta, respuesta y cargas ICE';
+
+  @override
+  String manualPeerSessionSelectedBlockedSubtitle(Object name) {
+    return 'Se seleccionó a $name, pero este contacto está bloqueado.';
+  }
+
+  @override
+  String manualPeerSessionSelectedReadySubtitle(Object name) {
+    return 'Se seleccionó a $name. Pulsa Conectar para generar una oferta y una invitación lista para enviar.';
+  }
+
+  @override
+  String get manualPeerSessionBlockedContactChip => 'Contacto bloqueado';
+
+  @override
+  String get manualPeerSessionRefreshOfferAction => 'Actualizar oferta';
+
+  @override
+  String get manualPeerSessionCopyReplyAction => 'Copiar respuesta';
+
+  @override
+  String get manualPeerSessionCopyInviteAction => 'Copiar invitación';
+
+  @override
+  String get manualPeerSessionCopyLinkAction => 'Copiar enlace';
+
+  @override
+  String manualPeerSessionTargetChip(Object name) {
+    return 'Destino $name';
+  }
+
+  @override
+  String get manualPeerSessionOfferingChip => 'Ofertando';
+
+  @override
+  String get manualPeerSessionAnsweringChip => 'Respondiendo';
+
+  @override
+  String manualPeerSessionQueuedIceChip(Object count) {
+    return 'ICE en cola $count';
+  }
+
+  @override
+  String get manualPeerSessionInputLabel =>
+      'Pega invitación, reply, offer, answer o carga ICE';
+
+  @override
+  String get manualPeerSessionInputHelp =>
+      'Este campo acepta el texto completo de la invitación o respuesta de GungChat, además de cargas de señalización sin procesar.';
+
+  @override
+  String get manualPeerSessionStartOfferAction => 'Iniciar oferta';
+
+  @override
+  String get manualPeerSessionNewOfferAction => 'Nueva oferta';
+
+  @override
+  String get manualPeerSessionApplyInputAction => 'Aplicar entrada';
+
+  @override
+  String get manualPeerSessionPasteInviteAction => 'Pegar invitación';
+
+  @override
+  String get manualPeerSessionResetTooltip => 'Reiniciar sesión';
+
+  @override
+  String manualPeerSessionExpectedFingerprint(Object fingerprint) {
+    return 'Huella esperada: $fingerprint';
+  }
+
+  @override
+  String manualPeerSessionSessionLabel(Object id) {
+    return 'Sesión $id';
+  }
+
+  @override
+  String get manualPeerSessionAdvancedSignalsTitle => 'Señales avanzadas';
+
+  @override
+  String get manualPeerSessionHandshakeTimelineTitle =>
+      'Línea de tiempo del handshake';
+
+  @override
+  String get manualPeerSessionCopySignalTooltip => 'Copiar señal';
+
+  @override
+  String manualPeerSessionSignalCopied(Object label) {
+    return 'Se copió $label';
+  }
+
+  @override
+  String get manualPeerSessionSignalOfferLabel => 'Oferta';
+
+  @override
+  String get manualPeerSessionSignalAnswerLabel => 'Respuesta';
+
+  @override
+  String get manualPeerSessionSignalIceLabel => 'ICE';
+
+  @override
+  String get manualPeerSessionSignalCallOfferLabel => 'Oferta de llamada';
+
+  @override
+  String get manualPeerSessionSignalCallAnswerLabel => 'Respuesta de llamada';
+
+  @override
+  String get manualPeerSessionSignalCallIceLabel => 'ICE de llamada';
+
+  @override
+  String get manualPeerSessionSignalCallDeclineLabel => 'Rechazar llamada';
+
+  @override
+  String get manualPeerSessionSignalCallHangupLabel => 'Colgar llamada';
 
   @override
   String get videoCallCouldNotStartLabel =>

@@ -83,6 +83,13 @@ class MessageService {
     return _messageDatabase.updateDeliveryState(messageId, deliveryState);
   }
 
+  Future<void> updateMessageExpiry({
+    required String messageId,
+    DateTime? expiresAt,
+  }) {
+    return _messageDatabase.updateMessageExpiry(messageId, expiresAt);
+  }
+
   Future<void> updateReactions(
     String messageId,
     Map<String, List<String>> reactions,

@@ -11,6 +11,7 @@ import '../../preferences/locale_service.dart';
 import '../../preferences/notification_prefs_service.dart';
 import '../../preferences/theme_service.dart';
 import '../../templates/quick_reply_service.dart';
+import 'burn_after_read_delay_preferences.dart';
 import '../chat/presence_status.dart';
 
 class SettingsScreen extends ConsumerWidget {
@@ -22,6 +23,7 @@ class SettingsScreen extends ConsumerWidget {
     final appLocaleMode = ref.watch(appLocaleModeProvider);
     final themeMode = ref.watch(appThemeModeProvider);
     final readReceiptsEnabled = ref.watch(readReceiptsEnabledProvider);
+    final burnAfterReadDelay = ref.watch(burnAfterReadDelayProvider);
     final localPresenceStatus = ref.watch(localPresenceStatusProvider);
     final linkPreviewsEnabled = ref.watch(linkPreviewsEnabledProvider);
     final appLockSettings = ref.watch(appLockSettingsProvider);
@@ -331,11 +333,46 @@ class SettingsScreen extends ConsumerWidget {
           ),
           const SizedBox(height: 12),
           Card(
-            child: SwitchListTile.adaptive(
-              value: true,
-              onChanged: null,
-              title: Text(l10n.burnAfterReadDefaultTitle),
-              subtitle: Text(l10n.burnAfterReadDefaultSubtitle),
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    l10n.burnAfterReadDefaultTitle,
+                    style: Theme.of(context).textTheme.titleMedium,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(l10n.burnAfterReadDefaultSubtitle),
+                  const SizedBox(height: 12),
+                  DropdownButtonFormField<Duration>(
+                    initialValue: burnAfterReadDelay,
+                    decoration: InputDecoration(
+                      border: const OutlineInputBorder(),
+                      labelText: l10n.burnAfterReadDelayLabel,
+                      helperText: l10n.burnAfterReadDelayHelp,
+                    ),
+                    items: [
+                      for (final option
+                          in BurnAfterReadDelayPreferencesStorage.supportedDelays)
+                        DropdownMenuItem<Duration>(
+                          value: option,
+                          child: Text(_burnAfterReadDelayLabel(context, option)),
+                        ),
+                    ],
+                    onChanged: (value) {
+                      if (value == null) {
+                        return;
+                      }
+                      unawaited(
+                        ref
+                            .read(burnAfterReadDelayProvider.notifier)
+                            .setDelay(value),
+                      );
+                    },
+                  ),
+                ],
+              ),
             ),
           ),
           const SizedBox(height: 12),
@@ -365,6 +402,32 @@ class SettingsScreen extends ConsumerWidget {
           : activator.trigger.keyLabel.toUpperCase(),
     ];
     return pieces.join('+');
+  }
+
+  String _burnAfterReadDelayLabel(BuildContext context, Duration delay) {
+    final l10n = context.l10n;
+    if (delay == Duration.zero) {
+      return l10n.burnAfterReadDelayImmediate;
+    }
+    if (delay == const Duration(seconds: 5)) {
+      return l10n.burnAfterReadDelay5Seconds;
+    }
+    if (delay == const Duration(seconds: 10)) {
+      return l10n.burnAfterReadDelay10Seconds;
+    }
+    if (delay == const Duration(seconds: 30)) {
+      return l10n.burnAfterReadDelay30Seconds;
+    }
+    if (delay == const Duration(minutes: 1)) {
+      return l10n.burnAfterReadDelay1Minute;
+    }
+    if (delay == const Duration(minutes: 5)) {
+      return l10n.burnAfterReadDelay5Minutes;
+    }
+    if (delay == const Duration(minutes: 10)) {
+      return l10n.burnAfterReadDelay10Minutes;
+    }
+    return '${delay.inSeconds}s';
   }
 }
 

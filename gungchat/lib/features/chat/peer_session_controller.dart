@@ -26,6 +26,7 @@ typedef LoadMessageService = Future<MessageService> Function();
 typedef LoadVoiceMessageService = VoiceMessageService Function();
 typedef LoadAttachmentMessageService = AttachmentMessageService Function();
 typedef RefreshConversationMessages = void Function(String conversationId);
+typedef LoadBurnAfterReadDelay = Duration Function();
 typedef DispatchLocalSignal = Future<void> Function({
   required String encodedSignal,
   required String targetAddress,
@@ -238,6 +239,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
     required CryptoService cryptoService,
     required DispatchLocalSignal dispatchLocalSignal,
     required IsBlockedFingerprint isBlockedFingerprint,
+    required LoadBurnAfterReadDelay loadBurnAfterReadDelay,
     Uuid? uuid,
   })  : _loadIdentity = loadIdentity,
         _loadMessageService = loadMessageService,
@@ -250,6 +252,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         _cryptoService = cryptoService,
         _dispatchLocalSignal = dispatchLocalSignal,
         _isBlockedFingerprint = isBlockedFingerprint,
+        _loadBurnAfterReadDelay = loadBurnAfterReadDelay,
         _uuid = uuid ?? const Uuid(),
         super(const PeerSessionState()) {
     _stateSubscription = _webRtcManager.states.listen(_handleTransportState);
@@ -266,6 +269,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   final CryptoService _cryptoService;
   final DispatchLocalSignal _dispatchLocalSignal;
   final IsBlockedFingerprint _isBlockedFingerprint;
+  final LoadBurnAfterReadDelay _loadBurnAfterReadDelay;
   final Uuid _uuid;
 
   StreamSubscription<WebRtcSessionState>? _stateSubscription;
@@ -277,6 +281,7 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   final List<RTCIceCandidate> _pendingRemoteIceCandidates = [];
   Timer? _localTypingTimer;
   Timer? _remoteTypingTimer;
+  final Map<String, Timer> _burnAfterReadTimers = <String, Timer>{};
   bool _localTypingActive = false;
   PeerPresenceStatus? _lastSentPresenceStatus;
   String? _lastSentCustomStatusText;
@@ -706,7 +711,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
           message.burnAfterRead &&
           !message.isOutgoing &&
           !message.isDeleted) {
-        await messageService.deleteMessage(messageId);
+        await _scheduleBurnAfterReadDeletion(
+          message: message,
+          messageService: messageService,
+          conversationId: conversationId,
+        );
       }
     }
 
@@ -914,6 +923,10 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
   void dispose() {
     _localTypingTimer?.cancel();
     _remoteTypingTimer?.cancel();
+    for (final timer in _burnAfterReadTimers.values) {
+      timer.cancel();
+    }
+    _burnAfterReadTimers.clear();
     _stateSubscription?.cancel();
     super.dispose();
   }
@@ -1653,7 +1666,11 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
           message.burnAfterRead &&
           message.isOutgoing &&
           !message.isDeleted) {
-        await messageService.deleteMessage(messageId);
+        await _scheduleBurnAfterReadDeletion(
+          message: message,
+          messageService: messageService,
+          conversationId: conversationId,
+        );
       }
     }
     _refreshConversation(conversationId);
@@ -1667,6 +1684,45 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         _ => 'Peer confirmed a secure message update.',
       },
     );
+  }
+
+  Future<void> _scheduleBurnAfterReadDeletion({
+    required Message message,
+    required MessageService messageService,
+    required String conversationId,
+  }) async {
+    final delay = _loadBurnAfterReadDelay();
+    final normalizedDelay = delay.isNegative ? Duration.zero : delay;
+    final expiresAt = DateTime.now().add(normalizedDelay);
+
+    await messageService.updateMessageExpiry(
+      messageId: message.id,
+      expiresAt: expiresAt,
+    );
+
+    _burnAfterReadTimers.remove(message.id)?.cancel();
+    _burnAfterReadTimers[message.id] = Timer(normalizedDelay, () async {
+      _burnAfterReadTimers.remove(message.id);
+
+      try {
+        final latestMessage = await messageService.getMessage(message.id);
+        if (latestMessage == null || latestMessage.isDeleted) {
+          _refreshConversation(conversationId);
+          return;
+        }
+
+        final latestExpiry = latestMessage.expiresAt;
+        if (latestExpiry == null || latestExpiry.isAfter(DateTime.now())) {
+          return;
+        }
+
+        await messageService.deleteMessage(message.id);
+      } catch (error, stackTrace) {
+        debugPrint('Burn-after-read deletion failed: $error\n$stackTrace');
+      } finally {
+        _refreshConversation(conversationId);
+      }
+    });
   }
 
   Future<void> _handleReactionEnvelope(PeerTransportEnvelope envelope) async {

@@ -212,6 +212,17 @@ class MessageDatabase {
     );
   }
 
+  Future<void> updateMessageExpiry(String messageId, DateTime? expiresAt) async {
+    await _requireDatabase().update(
+      'messages',
+      <String, Object?>{
+        'expires_at': expiresAt?.toIso8601String(),
+      },
+      where: 'id = ?',
+      whereArgs: [messageId],
+    );
+  }
+
   Future<void> updateReactions(
     String messageId,
     Map<String, List<String>> reactions,
