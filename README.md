@@ -129,5 +129,5 @@ We especially need help with:
 
 If you want to help, please open an issue or send a pull request.
 
-## The latest release: version 2.0.27 and download Apps.
-[![QR code](./QR-code-2.0.27.jpg)]
+## The latest release: version 2.0.28 and download Apps.
+[![QR code](gungchat/assets/gungchat-releases-qr.svg)](https://github.com/gungwang/gungchat/releases)

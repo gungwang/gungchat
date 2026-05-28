@@ -125,3 +125,5 @@ flutter build ios
 - WebRTC 与点对点连接问题排查
 
 如果你愿意参与，请提交 issue 或 pull request。
+
+[![QR code](gungchat/assets/gungchat-releases-qr.svg)](https://github.com/gungwang/gungchat/releases)
