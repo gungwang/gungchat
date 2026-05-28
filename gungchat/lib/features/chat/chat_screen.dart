@@ -28,7 +28,9 @@ import 'peer_invitation_builder.dart';
 import 'peer_invitation_parser.dart';
 import 'peer_session_controller.dart';
 import 'presence_status.dart';
+import 'sticker_pack.dart';
 import 'widgets/message_bubble.dart';
+import 'widgets/sticker_picker_sheet.dart';
 
 class ChatScreen extends ConsumerStatefulWidget {
   const ChatScreen({super.key});
@@ -40,6 +42,7 @@ class ChatScreen extends ConsumerStatefulWidget {
 class _ChatScreenState extends ConsumerState<ChatScreen> {
   final TextEditingController _composerController = TextEditingController();
   final TextEditingController _signalController = TextEditingController();
+  final ScrollController _messagesScrollController = ScrollController();
   final Set<String> _markingReadMessageIds = <String>{};
   final Map<String, GlobalKey> _messageKeys = <String, GlobalKey>{};
   Message? _replyingToMessage;
@@ -49,6 +52,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
   bool _burnAfterRead = true;
   bool _sending = false;
   int _attachmentSequence = 0;
+  String? _lastSeenConversationId;
+  int _lastSeenMessageCount = 0;
+  String? _lastSeenLatestMessageId;
 
   @override
   void dispose() {
@@ -57,6 +63,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     _highlightClearTimer?.cancel();
     _composerController.dispose();
     _signalController.dispose();
+    _messagesScrollController.dispose();
     super.dispose();
   }
 
@@ -353,6 +360,45 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     );
   }
 
+  Future<void> _pickAndSendSticker({
+    required Message? replyingToMessage,
+  }) async {
+    final stickerId = await StickerPickerSheet.show(context);
+    if (stickerId == null || !mounted) {
+      return;
+    }
+    final peerSession = ref.read(peerSessionControllerProvider);
+    if (!peerSession.isTransportReady) {
+      _showSnack(context.l10n.composerOpenSessionForStickers);
+      return;
+    }
+    if (_sending) {
+      return;
+    }
+    setState(() {
+      _sending = true;
+    });
+    try {
+      final sent = await ref
+          .read(peerSessionControllerProvider.notifier)
+          .sendMessage(
+            body: StickerPack.encode(stickerId),
+            burnAfterRead: _burnAfterRead,
+            replyToMessageId: replyingToMessage?.id,
+            replyToBody: replyingToMessage?.previewText,
+          );
+      if (sent && mounted) {
+        _clearReplyTarget();
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _sending = false;
+        });
+      }
+    }
+  }
+
   Future<void> _openMediaGallery({
     required String conversationId,
     required String title,
@@ -561,6 +607,51 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     }
   }
 
+  void _maybeAutoScrollToLatest({
+    required String conversationId,
+    required List<Message> messages,
+  }) {
+    final latestId = messages.isEmpty ? null : messages.last.id;
+    final conversationChanged = _lastSeenConversationId != conversationId;
+    final gotNewMessage = !conversationChanged &&
+        (messages.length > _lastSeenMessageCount ||
+            (latestId != null && latestId != _lastSeenLatestMessageId));
+
+    _lastSeenConversationId = conversationId;
+    _lastSeenMessageCount = messages.length;
+    _lastSeenLatestMessageId = latestId;
+
+    if (messages.isEmpty) {
+      return;
+    }
+    if (!conversationChanged && !gotNewMessage) {
+      return;
+    }
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted || !_messagesScrollController.hasClients) {
+        return;
+      }
+      final position = _messagesScrollController.position;
+      if (conversationChanged) {
+        _messagesScrollController.jumpTo(position.maxScrollExtent);
+        return;
+      }
+      // Only auto-scroll if the user is already near the bottom, so we don't
+      // yank them away from scroll-back history.
+      final distanceFromBottom = position.maxScrollExtent - position.pixels;
+      if (distanceFromBottom <= 200) {
+        unawaited(
+          _messagesScrollController.animateTo(
+            position.maxScrollExtent,
+            duration: const Duration(milliseconds: 220),
+            curve: Curves.easeOut,
+          ),
+        );
+      }
+    });
+  }
+
   Future<void> _markVisibleMessagesRead({
     required String conversationId,
     required List<Message> messages,
@@ -613,9 +704,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
 
     if (peerSession.isSessionActive && !peerSession.isTransportReady) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content:
-              Text('Finish the signal exchange before sending peer messages.'),
+        SnackBar(
+          content: Text(context.l10n.composerFinishSignalExchangeWarning),
         ),
       );
       return;
@@ -625,7 +715,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            'Open or answer a session with ${selectedContact.displayName} before sending.',
+            context.l10n.composerOpenSessionBeforeSend(selectedContact.displayName),
           ),
         ),
       );
@@ -1037,10 +1127,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     if (!canSendSecure) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text(
-              'Open the secure channel before recording voice messages.',
-            ),
+          SnackBar(
+            content: Text(context.l10n.composerOpenChannelBeforeRecording),
           ),
         );
       }
@@ -1407,6 +1495,11 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     final canSendSecure = peerSession.isTransportReady;
     final canSaveLocal =
         selectedContact == null && !peerSession.isSessionActive;
+    final canQuickConnect = !canSendSecure &&
+        selectedContact != null &&
+        !isSelectedContactBlocked &&
+        (selectedContact.lastKnownAddress?.trim().isNotEmpty ?? false) &&
+        selectedContact.trustLevel == ContactTrustLevel.verified;
     final isRecordingVoice = voiceMessageService.isRecording;
     final composerEnabled = !isRecordingVoice;
     final canStartVideoCall =
@@ -1613,6 +1706,10 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       padding: const EdgeInsets.all(12),
                       child: messagesAsync.when(
                     data: (messages) {
+                      _maybeAutoScrollToLatest(
+                        conversationId: activeConversationId,
+                        messages: messages,
+                      );
                       if (activeConversationId != bootstrapConversationId) {
                         WidgetsBinding.instance.addPostFrameCallback((_) {
                           if (!mounted) {
@@ -1643,6 +1740,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       }
 
                       return ListView(
+                        controller: _messagesScrollController,
                         children: [
                           for (final message in messages)
                             _buildMessage(
@@ -1818,7 +1916,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               const SizedBox(width: 8),
                               Expanded(
                                 child: Text(
-                                  'Recording voice message... tap Stop & Send when ready. Up to 2 minutes.',
+                                  l10n.composerRecordingHint,
                                   style: theme.textTheme.bodyMedium,
                                 ),
                               ),
@@ -1855,21 +1953,21 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                               ),
                       decoration: InputDecoration(
                         labelText: editingMessage != null
-                          ? 'Edit secure message'
+                          ? l10n.composerEditLabel
                           : canSendSecure
-                            ? 'Secure peer message'
+                            ? l10n.composerSecureLabel
                             : canSaveLocal
-                                ? 'Bootstrap message'
-                                : 'Peer message',
+                                ? l10n.composerBootstrapLabel
+                                : l10n.composerPeerLabel,
                         hintText: editingMessage != null
-                          ? 'Update your encrypted message for the active peer session...'
+                          ? l10n.composerEditHint
                           : canSendSecure
-                            ? 'Type an encrypted message for the active peer session...'
+                            ? l10n.composerPeerHint
                             : canSaveLocal
-                                ? 'Type a local encrypted message draft...'
+                                ? l10n.composerBootstrapHint
                                 : isConversationBlocked
-                                    ? 'This contact is blocked. Slash commands still run locally.'
-                                    : 'Type /help for local commands, or complete the signal exchange to enable sending.',
+                                    ? l10n.composerBlockedHint
+                                    : l10n.composerHelpHint,
                         border: const OutlineInputBorder(),
                       ),
                     ),
@@ -1901,7 +1999,9 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     if (peerSession.isRemoteTyping) ...[
                       const SizedBox(height: 8),
                       Text(
-                        '${_typingPeerLabel(peerSession, selectedContact)} is typing...',
+                        l10n.composerTypingStatus(
+                          _typingPeerLabel(peerSession, selectedContact),
+                        ),
                         style: theme.textTheme.bodyMedium?.copyWith(
                           color: theme.colorScheme.primary,
                         ),
@@ -1910,7 +2010,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                     Row(
                       children: [
                         PopupMenuButton<_ChatAttachmentAction>(
-                          tooltip: 'More actions',
+                          tooltip: l10n.composerMoreActionsTooltip,
                           enabled: !_sending && !isRecordingVoice,
                           icon: const Icon(Icons.add_circle_outline),
                           onSelected: (action) {
@@ -1938,38 +2038,52 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     replyingToMessage: replyingToMessage,
                                   );
                                 }
+                              case _ChatAttachmentAction.sticker:
+                                if (canSendSecure && !isConversationBlocked) {
+                                  _pickAndSendSticker(
+                                    replyingToMessage: replyingToMessage,
+                                  );
+                                }
                             }
                           },
                           itemBuilder: (context) => [
-                            const PopupMenuItem(
+                            PopupMenuItem(
                               value: _ChatAttachmentAction.gallery,
                               child: ListTile(
-                                leading: Icon(Icons.photo_library_outlined),
-                                title: Text('Gallery'),
+                                leading: const Icon(Icons.photo_library_outlined),
+                                title: Text(l10n.attachmentMenuGallery),
                               ),
                             ),
                             PopupMenuItem(
                               value: _ChatAttachmentAction.files,
                               enabled: canSendSecure && !isConversationBlocked,
-                              child: const ListTile(
-                                leading: Icon(Icons.attach_file),
-                                title: Text('Files'),
+                              child: ListTile(
+                                leading: const Icon(Icons.attach_file),
+                                title: Text(l10n.attachmentMenuFiles),
                               ),
                             ),
                             PopupMenuItem(
                               value: _ChatAttachmentAction.location,
                               enabled: canSendSecure && !isConversationBlocked,
-                              child: const ListTile(
-                                leading: Icon(Icons.place_outlined),
-                                title: Text('Location'),
+                              child: ListTile(
+                                leading: const Icon(Icons.place_outlined),
+                                title: Text(l10n.attachmentMenuLocation),
                               ),
                             ),
                             PopupMenuItem(
                               value: _ChatAttachmentAction.contact,
                               enabled: canSendSecure && !isConversationBlocked,
-                              child: const ListTile(
-                                leading: Icon(Icons.contact_page_outlined),
-                                title: Text('Contact'),
+                              child: ListTile(
+                                leading: const Icon(Icons.contact_page_outlined),
+                                title: Text(l10n.attachmentMenuContact),
+                              ),
+                            ),
+                            PopupMenuItem(
+                              value: _ChatAttachmentAction.sticker,
+                              enabled: canSendSecure && !isConversationBlocked,
+                              child: ListTile(
+                                leading: const Icon(Icons.emoji_emotions_outlined),
+                                title: Text(l10n.attachmentMenuSticker),
                               ),
                             ),
                           ],
@@ -1978,8 +2092,8 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                           const SizedBox(width: 4),
                           IconButton(
                             tooltip: isRecordingVoice
-                                ? 'Stop and send voice'
-                                : 'Record voice',
+                                ? l10n.composerStopAndSendVoiceTooltip
+                                : l10n.composerRecordVoiceTooltip,
                             onPressed: identityAsync.asData == null ||
                                     _sending ||
                                     editingMessage != null ||
@@ -2003,12 +2117,28 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                     _sending ||
                                     isRecordingVoice
                                 ? null
-                                : () => _submitComposer(
-                                      identityAsync.requireValue,
-                                      selectedContact,
-                                      replyingToMessage: replyingToMessage,
-                                      editingMessage: editingMessage,
-                                    ),
+                                : (!canSendSecure &&
+                                        !canSaveLocal &&
+                                        editingMessage == null &&
+                                        canQuickConnect)
+                                    ? () {
+                                        ref
+                                                .read(
+                                                  pendingPeerConnectIntentProvider
+                                                      .notifier,
+                                                )
+                                                .state =
+                                          PeerConnectIntent(
+                                          fingerprint:
+                                              selectedContact.fingerprint,
+                                        );
+                                      }
+                                    : () => _submitComposer(
+                                          identityAsync.requireValue,
+                                          selectedContact,
+                                          replyingToMessage: replyingToMessage,
+                                          editingMessage: editingMessage,
+                                        ),
                             icon: _sending
                                 ? const SizedBox(
                                     width: 18,
@@ -2020,16 +2150,22 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                                 : Icon(
                                     editingMessage != null
                                         ? Icons.check
-                                        : Icons.send,
+                                        : (!canSendSecure &&
+                                                !canSaveLocal &&
+                                                canQuickConnect)
+                                            ? Icons.wifi_tethering_outlined
+                                            : Icons.send,
                                   ),
                             label: Text(
                               editingMessage != null
-                                  ? 'Save Message Edit'
+                                  ? l10n.composerSaveMessageEditAction
                                   : canSendSecure
-                                      ? 'Send Secure Message'
+                                      ? l10n.composerSendAction
                                       : canSaveLocal
-                                          ? 'Save Local Message'
-                                          : 'Wait For Secure Channel',
+                                          ? l10n.composerSaveLocalAction
+                                          : canQuickConnect
+                                              ? l10n.composerConnectAction
+                                              : l10n.composerWaitForSecureChannel,
                             ),
                           ),
                         ),
@@ -2040,7 +2176,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
                       children: [
                         Expanded(
                           child: Text(
-                            'Burn after read',
+                            l10n.composerBurnAfterReadLabel,
                             style: theme.textTheme.bodySmall,
                           ),
                         ),
@@ -2113,6 +2249,7 @@ enum _ChatAttachmentAction {
   files,
   location,
   contact,
+  sticker,
 }
 
 class _PeerSessionCard extends StatelessWidget {

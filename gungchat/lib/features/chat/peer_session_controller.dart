@@ -701,6 +701,13 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
       if (sendReceipt) {
         await _sendReadReceipt(messageId);
       }
+      final message = await messageService.getMessage(messageId);
+      if (message != null &&
+          message.burnAfterRead &&
+          !message.isOutgoing &&
+          !message.isDeleted) {
+        await messageService.deleteMessage(messageId);
+      }
     }
 
     _refreshConversation(conversationId);
@@ -1640,6 +1647,15 @@ class PeerSessionController extends StateNotifier<PeerSessionState> {
         conversationIdForFingerprint(envelope.senderFingerprint);
     final messageService = await _loadMessageService();
     await messageService.updateDeliveryState(messageId, receiptState);
+    if (receiptState == MessageDeliveryState.read) {
+      final message = await messageService.getMessage(messageId);
+      if (message != null &&
+          message.burnAfterRead &&
+          message.isOutgoing &&
+          !message.isDeleted) {
+        await messageService.deleteMessage(messageId);
+      }
+    }
     _refreshConversation(conversationId);
 
     state = state.copyWith(

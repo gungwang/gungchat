@@ -583,4 +583,242 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get cancelReplyTooltip => 'Annuler la réponse';
+
+  @override
+  String get composerSendAction => 'Envoyer';
+
+  @override
+  String get composerSaveLocalAction => 'Enregistrer le message local';
+
+  @override
+  String get composerWaitForSecureChannel => 'En attente du canal sécurisé';
+
+  @override
+  String get composerSaveMessageEditAction => 'Enregistrer la modification';
+
+  @override
+  String get composerConnectAction => 'Connecter';
+
+  @override
+  String get composerBurnAfterReadLabel => 'Effacer après lecture';
+
+  @override
+  String get composerRecordVoiceTooltip => 'Enregistrer la voix';
+
+  @override
+  String get composerStopAndSendVoiceTooltip => 'Arrêter et envoyer la voix';
+
+  @override
+  String get composerMoreActionsTooltip => 'Plus d\'actions';
+
+  @override
+  String get composerBootstrapHint => 'Saisissez un brouillon chiffré local...';
+
+  @override
+  String get composerPeerHint =>
+      'Saisissez un message chiffré pour la session active...';
+
+  @override
+  String get composerEditHint =>
+      'Modifiez votre message chiffré pour la session active...';
+
+  @override
+  String get composerHelpHint =>
+      'Tapez /help pour les commandes locales, ou terminez l\'échange de signaux pour activer l\'envoi.';
+
+  @override
+  String get composerBlockedHint =>
+      'Ce contact est bloqué. Les commandes slash fonctionnent toujours localement.';
+
+  @override
+  String get composerOpenSessionForStickers =>
+      'Ouvrez une session sécurisée avant d\'envoyer des stickers.';
+
+  @override
+  String get composerFinishSignalExchangeWarning =>
+      'Terminez l\'échange de signaux avant d\'envoyer des messages entre pairs.';
+
+  @override
+  String composerOpenSessionBeforeSend(Object name) {
+    return 'Ouvrez ou répondez à une session avec $name avant d\'envoyer.';
+  }
+
+  @override
+  String get composerRecordingHint =>
+      'Enregistrement du message vocal... appuyez sur Arrêter et envoyer quand prêt. Jusqu\'à 2 minutes.';
+
+  @override
+  String get composerOpenChannelBeforeRecording =>
+      'Ouvrez le canal sécurisé avant d\'enregistrer des messages vocaux.';
+
+  @override
+  String get composerMicrophoneError =>
+      'Impossible d\'accéder au microphone. Vérifiez les autorisations et les paramètres du micro.';
+
+  @override
+  String get composerEditLabel => 'Modifier le message sécurisé';
+
+  @override
+  String get composerSecureLabel => 'Message sécurisé au pair';
+
+  @override
+  String get composerBootstrapLabel => 'Message d\'amorçage';
+
+  @override
+  String get composerPeerLabel => 'Message au pair';
+
+  @override
+  String composerTypingStatus(Object name) {
+    return '$name est en train d\'écrire...';
+  }
+
+  @override
+  String get attachmentMenuGallery => 'Galerie';
+
+  @override
+  String get attachmentMenuFiles => 'Fichiers';
+
+  @override
+  String get attachmentMenuLocation => 'Position';
+
+  @override
+  String get attachmentMenuContact => 'Contact';
+
+  @override
+  String get attachmentMenuSticker => 'Sticker';
+
+  @override
+  String get stickerPickerTitle => 'Stickers';
+
+  @override
+  String get stickerLabelSmile => 'Sourire';
+
+  @override
+  String get stickerLabelHeart => 'Cœur';
+
+  @override
+  String get stickerLabelThumbs => 'Pouce levé';
+
+  @override
+  String get stickerLabelParty => 'Fête';
+
+  @override
+  String get stickerLabelFire => 'Feu';
+
+  @override
+  String get stickerLabelSad => 'Triste';
+
+  @override
+  String get stickerLabelOk => 'OK';
+
+  @override
+  String get stickerLabelClap => 'Applaudissements';
+
+  @override
+  String get messageBubbleQuotedMessage => 'Message cité';
+
+  @override
+  String get messageBubbleStarTooltip => 'Marquer d\'une étoile';
+
+  @override
+  String get messageBubbleRemoveStarTooltip => 'Retirer l\'étoile';
+
+  @override
+  String get messageBubbleActionsTooltip => 'Actions du message';
+
+  @override
+  String get messageBubbleEditAction => 'Modifier le message';
+
+  @override
+  String get messageBubbleDeleteForEveryoneAction => 'Supprimer pour tous';
+
+  @override
+  String get messageBubbleErasePermanentlyAction => 'Effacer définitivement';
+
+  @override
+  String get messageBubbleAddReactionTooltip => 'Ajouter une réaction';
+
+  @override
+  String get messageBubbleMessageDeletedLabel => 'Message supprimé';
+
+  @override
+  String get messageBubbleBurnAfterReadBadge => 'À effacer après lecture';
+
+  @override
+  String get messageBubblePersistentBadge => 'Persistant';
+
+  @override
+  String get messageBubbleDeletedMarker => 'supprimé';
+
+  @override
+  String get messageBubbleEditedMarker => 'modifié';
+
+  @override
+  String get messageBubbleSpoilerLabel => 'Spoiler';
+
+  @override
+  String get messageBubbleSpoilerHint => 'Spoiler, appuyez pour révéler';
+
+  @override
+  String get messageBubblePlayVoiceTooltip => 'Lire le message vocal';
+
+  @override
+  String get messageBubbleStopVoiceTooltip => 'Arrêter le message vocal';
+
+  @override
+  String get messageBubbleVoiceMessageLabel => 'Message vocal';
+
+  @override
+  String get messageBubbleSharedLocationLabel => 'Position partagée';
+
+  @override
+  String get messageBubbleSharedContactLabel => 'Contact partagé';
+
+  @override
+  String messageBubbleLatLngLabel(Object lat, Object lng) {
+    return 'Lat $lat, Lng $lng';
+  }
+
+  @override
+  String get messageBubbleLoadingLinkPreview =>
+      'Chargement de l\'aperçu du lien...';
+
+  @override
+  String get messageBubbleAttachmentSentAnnouncement => 'Pièce jointe envoyée';
+
+  @override
+  String get messageBubbleQuickReplyInsertedAnnouncement =>
+      'Réponse rapide insérée';
+
+  @override
+  String get messageBubbleDialogCancel => 'Annuler';
+
+  @override
+  String get messageBubbleDialogClose => 'Fermer';
+
+  @override
+  String get messageBubbleDeleteForEveryoneTitle =>
+      'Supprimer le message pour tous ?';
+
+  @override
+  String get messageBubbleDeleteForEveryoneBody =>
+      'Le message sera remplacé par un marqueur de suppression dans la conversation.';
+
+  @override
+  String get messageBubbleErasePermanentlyTitle =>
+      'Effacer le message définitivement ?';
+
+  @override
+  String get messageBubbleErasePermanentlyBody =>
+      'Cela supprime l\'enregistrement du message au lieu d\'afficher un marqueur de suppression.';
+
+  @override
+  String get messageBubbleEraseLabel => 'Effacer';
+
+  @override
+  String get messageBubbleDeleteLabel => 'Supprimer';
+
+  @override
+  String get messageBubbleOriginalMessageGone =>
+      'Le message d\'origine n\'est plus disponible.';
 }
