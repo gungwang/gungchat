@@ -1015,6 +1015,60 @@ abstract class AppLocalizations {
   /// **'The chat bootstrap flow already assumes ephemeral-first messaging.'**
   String get burnAfterReadDefaultSubtitle;
 
+  /// No description provided for @burnAfterReadDelayLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete delay after read'**
+  String get burnAfterReadDelayLabel;
+
+  /// No description provided for @burnAfterReadDelayHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'How long burn-after-read messages stay visible after they are marked as read.'**
+  String get burnAfterReadDelayHelp;
+
+  /// No description provided for @burnAfterReadDelayImmediate.
+  ///
+  /// In en, this message translates to:
+  /// **'Immediately'**
+  String get burnAfterReadDelayImmediate;
+
+  /// No description provided for @burnAfterReadDelay5Seconds.
+  ///
+  /// In en, this message translates to:
+  /// **'5 seconds'**
+  String get burnAfterReadDelay5Seconds;
+
+  /// No description provided for @burnAfterReadDelay10Seconds.
+  ///
+  /// In en, this message translates to:
+  /// **'10 seconds'**
+  String get burnAfterReadDelay10Seconds;
+
+  /// No description provided for @burnAfterReadDelay30Seconds.
+  ///
+  /// In en, this message translates to:
+  /// **'30 seconds'**
+  String get burnAfterReadDelay30Seconds;
+
+  /// No description provided for @burnAfterReadDelay1Minute.
+  ///
+  /// In en, this message translates to:
+  /// **'1 minute'**
+  String get burnAfterReadDelay1Minute;
+
+  /// No description provided for @burnAfterReadDelay5Minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'5 minutes'**
+  String get burnAfterReadDelay5Minutes;
+
+  /// No description provided for @burnAfterReadDelay10Minutes.
+  ///
+  /// In en, this message translates to:
+  /// **'10 minutes'**
+  String get burnAfterReadDelay10Minutes;
+
   /// No description provided for @antiSurveillanceGuardTitle.
   ///
   /// In en, this message translates to:
@@ -1092,6 +1146,318 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Connection details'**
   String get connectionDetailsTooltip;
+
+  /// No description provided for @connectionStateOpen.
+  ///
+  /// In en, this message translates to:
+  /// **'Open'**
+  String get connectionStateOpen;
+
+  /// No description provided for @connectionStateConnecting.
+  ///
+  /// In en, this message translates to:
+  /// **'Connecting'**
+  String get connectionStateConnecting;
+
+  /// No description provided for @connectionStateFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Failed'**
+  String get connectionStateFailed;
+
+  /// No description provided for @connectionStateOffline.
+  ///
+  /// In en, this message translates to:
+  /// **'Offline'**
+  String get connectionStateOffline;
+
+  /// No description provided for @connectionStateClosed.
+  ///
+  /// In en, this message translates to:
+  /// **'Closed'**
+  String get connectionStateClosed;
+
+  /// No description provided for @connectionStateIdle.
+  ///
+  /// In en, this message translates to:
+  /// **'Idle'**
+  String get connectionStateIdle;
+
+  /// No description provided for @connectionDetailsDeviceIdentityTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Device identity'**
+  String get connectionDetailsDeviceIdentityTitle;
+
+  /// No description provided for @connectionDetailsIdentityDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'X25519 key material is generated once and persisted in secure storage.'**
+  String get connectionDetailsIdentityDescription;
+
+  /// No description provided for @connectionDetailsIdentityBootstrapFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Identity bootstrap failed: {error}'**
+  String connectionDetailsIdentityBootstrapFailed(Object error);
+
+  /// No description provided for @connectionDetailsNetworkPolicyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Network policy'**
+  String get connectionDetailsNetworkPolicyTitle;
+
+  /// No description provided for @connectionDetailsNetworkLanPreferred.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN preferred'**
+  String get connectionDetailsNetworkLanPreferred;
+
+  /// No description provided for @connectionDetailsNetworkMobileData.
+  ///
+  /// In en, this message translates to:
+  /// **'Mobile data'**
+  String get connectionDetailsNetworkMobileData;
+
+  /// No description provided for @connectionDetailsNetworkConnected.
+  ///
+  /// In en, this message translates to:
+  /// **'Connected'**
+  String get connectionDetailsNetworkConnected;
+
+  /// No description provided for @connectionDetailsNetworkLanDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'LAN routing is available and should be preferred for P2P sessions.'**
+  String get connectionDetailsNetworkLanDescription;
+
+  /// No description provided for @connectionDetailsNetworkFallbackDescription.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual IP and TURN fallback can be layered on top of this monitor next.'**
+  String get connectionDetailsNetworkFallbackDescription;
+
+  /// No description provided for @connectionDetailsNetworkMonitorFailed.
+  ///
+  /// In en, this message translates to:
+  /// **'Network monitor failed: {error}'**
+  String connectionDetailsNetworkMonitorFailed(Object error);
+
+  /// No description provided for @manualPeerSessionTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Manual Peer Session'**
+  String get manualPeerSessionTitle;
+
+  /// No description provided for @manualPeerSessionNoSelectionSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Select a contact or paste a remote offer to answer manually'**
+  String get manualPeerSessionNoSelectionSubtitle;
+
+  /// No description provided for @manualPeerSessionInviteImportedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Invite imported. Copy the reply bundle or continue exchanging raw answer and ICE payloads.'**
+  String get manualPeerSessionInviteImportedSubtitle;
+
+  /// No description provided for @manualPeerSessionExchangePayloadsSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Exchange offer, answer, and ICE payloads'**
+  String get manualPeerSessionExchangePayloadsSubtitle;
+
+  /// No description provided for @manualPeerSessionSelectedBlockedSubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected {name}, but this contact is blocked.'**
+  String manualPeerSessionSelectedBlockedSubtitle(Object name);
+
+  /// No description provided for @manualPeerSessionSelectedReadySubtitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Selected {name}. Connect to generate an offer and a ready-to-send invite.'**
+  String manualPeerSessionSelectedReadySubtitle(Object name);
+
+  /// No description provided for @manualPeerSessionBlockedContactChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Blocked contact'**
+  String get manualPeerSessionBlockedContactChip;
+
+  /// No description provided for @manualPeerSessionRefreshOfferAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Refresh Offer'**
+  String get manualPeerSessionRefreshOfferAction;
+
+  /// No description provided for @manualPeerSessionCopyReplyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Reply'**
+  String get manualPeerSessionCopyReplyAction;
+
+  /// No description provided for @manualPeerSessionCopyInviteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Invite'**
+  String get manualPeerSessionCopyInviteAction;
+
+  /// No description provided for @manualPeerSessionCopyLinkAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy Link'**
+  String get manualPeerSessionCopyLinkAction;
+
+  /// No description provided for @manualPeerSessionTargetChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Target {name}'**
+  String manualPeerSessionTargetChip(Object name);
+
+  /// No description provided for @manualPeerSessionOfferingChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Offering'**
+  String get manualPeerSessionOfferingChip;
+
+  /// No description provided for @manualPeerSessionAnsweringChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Answering'**
+  String get manualPeerSessionAnsweringChip;
+
+  /// No description provided for @manualPeerSessionQueuedIceChip.
+  ///
+  /// In en, this message translates to:
+  /// **'Queued ICE {count}'**
+  String manualPeerSessionQueuedIceChip(Object count);
+
+  /// No description provided for @manualPeerSessionInputLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste invite, reply, offer, answer, or ICE payload'**
+  String get manualPeerSessionInputLabel;
+
+  /// No description provided for @manualPeerSessionInputHelp.
+  ///
+  /// In en, this message translates to:
+  /// **'This field accepts full GungChat invite or reply text as well as raw signaling payloads.'**
+  String get manualPeerSessionInputHelp;
+
+  /// No description provided for @manualPeerSessionStartOfferAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Start Offer'**
+  String get manualPeerSessionStartOfferAction;
+
+  /// No description provided for @manualPeerSessionNewOfferAction.
+  ///
+  /// In en, this message translates to:
+  /// **'New Offer'**
+  String get manualPeerSessionNewOfferAction;
+
+  /// No description provided for @manualPeerSessionApplyInputAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Apply Input'**
+  String get manualPeerSessionApplyInputAction;
+
+  /// No description provided for @manualPeerSessionPasteInviteAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Paste Invite'**
+  String get manualPeerSessionPasteInviteAction;
+
+  /// No description provided for @manualPeerSessionResetTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Reset session'**
+  String get manualPeerSessionResetTooltip;
+
+  /// No description provided for @manualPeerSessionExpectedFingerprint.
+  ///
+  /// In en, this message translates to:
+  /// **'Expected fingerprint: {fingerprint}'**
+  String manualPeerSessionExpectedFingerprint(Object fingerprint);
+
+  /// No description provided for @manualPeerSessionSessionLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Session {id}'**
+  String manualPeerSessionSessionLabel(Object id);
+
+  /// No description provided for @manualPeerSessionAdvancedSignalsTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Advanced signals'**
+  String get manualPeerSessionAdvancedSignalsTitle;
+
+  /// No description provided for @manualPeerSessionHandshakeTimelineTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Handshake timeline'**
+  String get manualPeerSessionHandshakeTimelineTitle;
+
+  /// No description provided for @manualPeerSessionCopySignalTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Copy signal'**
+  String get manualPeerSessionCopySignalTooltip;
+
+  /// No description provided for @manualPeerSessionSignalCopied.
+  ///
+  /// In en, this message translates to:
+  /// **'{label} copied'**
+  String manualPeerSessionSignalCopied(Object label);
+
+  /// No description provided for @manualPeerSessionSignalOfferLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Offer'**
+  String get manualPeerSessionSignalOfferLabel;
+
+  /// No description provided for @manualPeerSessionSignalAnswerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Answer'**
+  String get manualPeerSessionSignalAnswerLabel;
+
+  /// No description provided for @manualPeerSessionSignalIceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'ICE'**
+  String get manualPeerSessionSignalIceLabel;
+
+  /// No description provided for @manualPeerSessionSignalCallOfferLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Call Offer'**
+  String get manualPeerSessionSignalCallOfferLabel;
+
+  /// No description provided for @manualPeerSessionSignalCallAnswerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Call Answer'**
+  String get manualPeerSessionSignalCallAnswerLabel;
+
+  /// No description provided for @manualPeerSessionSignalCallIceLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Call ICE'**
+  String get manualPeerSessionSignalCallIceLabel;
+
+  /// No description provided for @manualPeerSessionSignalCallDeclineLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Call Decline'**
+  String get manualPeerSessionSignalCallDeclineLabel;
+
+  /// No description provided for @manualPeerSessionSignalCallHangupLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Call Hangup'**
+  String get manualPeerSessionSignalCallHangupLabel;
 
   /// No description provided for @videoCallCouldNotStartLabel.
   ///

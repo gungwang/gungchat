@@ -474,6 +474,33 @@ class AppLocalizationsZh extends AppLocalizations {
   String get burnAfterReadDefaultSubtitle => '聊天引导流程已经默认采用“先阅后焚”的消息方式。';
 
   @override
+  String get burnAfterReadDelayLabel => '阅后删除延迟';
+
+  @override
+  String get burnAfterReadDelayHelp => '消息被标记为已读后，阅后即焚消息还会保留多久。';
+
+  @override
+  String get burnAfterReadDelayImmediate => '立即删除';
+
+  @override
+  String get burnAfterReadDelay5Seconds => '5 秒';
+
+  @override
+  String get burnAfterReadDelay10Seconds => '10 秒';
+
+  @override
+  String get burnAfterReadDelay30Seconds => '30 秒';
+
+  @override
+  String get burnAfterReadDelay1Minute => '1 分钟';
+
+  @override
+  String get burnAfterReadDelay5Minutes => '5 分钟';
+
+  @override
+  String get burnAfterReadDelay10Minutes => '10 分钟';
+
+  @override
   String get antiSurveillanceGuardTitle => '反监控保护';
 
   @override
@@ -512,6 +539,186 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get connectionDetailsTooltip => '连接详情';
+
+  @override
+  String get connectionStateOpen => '已连接';
+
+  @override
+  String get connectionStateConnecting => '连接中';
+
+  @override
+  String get connectionStateFailed => '失败';
+
+  @override
+  String get connectionStateOffline => '离线';
+
+  @override
+  String get connectionStateClosed => '已关闭';
+
+  @override
+  String get connectionStateIdle => '空闲';
+
+  @override
+  String get connectionDetailsDeviceIdentityTitle => '设备身份';
+
+  @override
+  String get connectionDetailsIdentityDescription =>
+      'X25519 密钥材料只生成一次，并持久保存在安全存储中。';
+
+  @override
+  String connectionDetailsIdentityBootstrapFailed(Object error) {
+    return '设备身份初始化失败：$error';
+  }
+
+  @override
+  String get connectionDetailsNetworkPolicyTitle => '网络策略';
+
+  @override
+  String get connectionDetailsNetworkLanPreferred => '局域网优先';
+
+  @override
+  String get connectionDetailsNetworkMobileData => '移动数据';
+
+  @override
+  String get connectionDetailsNetworkConnected => '已连接';
+
+  @override
+  String get connectionDetailsNetworkLanDescription => '局域网路由可用，应优先用于 P2P 会话。';
+
+  @override
+  String get connectionDetailsNetworkFallbackDescription =>
+      '可在此监测基础上继续叠加手动 IP 和 TURN 回退。';
+
+  @override
+  String connectionDetailsNetworkMonitorFailed(Object error) {
+    return '网络监测失败：$error';
+  }
+
+  @override
+  String get manualPeerSessionTitle => '手动对等会话';
+
+  @override
+  String get manualPeerSessionNoSelectionSubtitle => '选择联系人，或粘贴远端 offer 以手动应答';
+
+  @override
+  String get manualPeerSessionInviteImportedSubtitle =>
+      '已导入邀请。复制 reply 数据包，或继续交换原始 answer 和 ICE 负载。';
+
+  @override
+  String get manualPeerSessionExchangePayloadsSubtitle =>
+      '交换 offer、answer 和 ICE 负载';
+
+  @override
+  String manualPeerSessionSelectedBlockedSubtitle(Object name) {
+    return '已选择 $name，但此联系人已被屏蔽。';
+  }
+
+  @override
+  String manualPeerSessionSelectedReadySubtitle(Object name) {
+    return '已选择 $name。点击“连接”以生成 offer 和可直接发送的邀请。';
+  }
+
+  @override
+  String get manualPeerSessionBlockedContactChip => '已屏蔽联系人';
+
+  @override
+  String get manualPeerSessionRefreshOfferAction => '刷新 Offer';
+
+  @override
+  String get manualPeerSessionCopyReplyAction => '复制 Reply';
+
+  @override
+  String get manualPeerSessionCopyInviteAction => '复制 Invite';
+
+  @override
+  String get manualPeerSessionCopyLinkAction => '复制链接';
+
+  @override
+  String manualPeerSessionTargetChip(Object name) {
+    return '目标 $name';
+  }
+
+  @override
+  String get manualPeerSessionOfferingChip => '发起方';
+
+  @override
+  String get manualPeerSessionAnsweringChip => '应答方';
+
+  @override
+  String manualPeerSessionQueuedIceChip(Object count) {
+    return '排队中的 ICE $count';
+  }
+
+  @override
+  String get manualPeerSessionInputLabel =>
+      '粘贴 invite、reply、offer、answer 或 ICE 负载';
+
+  @override
+  String get manualPeerSessionInputHelp =>
+      '此字段支持完整的 GungChat invite/reply 文本，以及原始信令负载。';
+
+  @override
+  String get manualPeerSessionStartOfferAction => '开始 Offer';
+
+  @override
+  String get manualPeerSessionNewOfferAction => '新建 Offer';
+
+  @override
+  String get manualPeerSessionApplyInputAction => '应用输入';
+
+  @override
+  String get manualPeerSessionPasteInviteAction => '粘贴 Invite';
+
+  @override
+  String get manualPeerSessionResetTooltip => '重置会话';
+
+  @override
+  String manualPeerSessionExpectedFingerprint(Object fingerprint) {
+    return '预期指纹：$fingerprint';
+  }
+
+  @override
+  String manualPeerSessionSessionLabel(Object id) {
+    return '会话 $id';
+  }
+
+  @override
+  String get manualPeerSessionAdvancedSignalsTitle => '高级信令';
+
+  @override
+  String get manualPeerSessionHandshakeTimelineTitle => '握手时间线';
+
+  @override
+  String get manualPeerSessionCopySignalTooltip => '复制信令';
+
+  @override
+  String manualPeerSessionSignalCopied(Object label) {
+    return '已复制 $label';
+  }
+
+  @override
+  String get manualPeerSessionSignalOfferLabel => '提议';
+
+  @override
+  String get manualPeerSessionSignalAnswerLabel => '应答';
+
+  @override
+  String get manualPeerSessionSignalIceLabel => 'ICE';
+
+  @override
+  String get manualPeerSessionSignalCallOfferLabel => '通话提议';
+
+  @override
+  String get manualPeerSessionSignalCallAnswerLabel => '通话应答';
+
+  @override
+  String get manualPeerSessionSignalCallIceLabel => '通话 ICE';
+
+  @override
+  String get manualPeerSessionSignalCallDeclineLabel => '拒绝通话';
+
+  @override
+  String get manualPeerSessionSignalCallHangupLabel => '挂断通话';
 
   @override
   String get videoCallCouldNotStartLabel => '无法发起视频通话';
@@ -1246,6 +1453,33 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
   String get burnAfterReadDefaultSubtitle => '聊天引導流程已預設採用「先閱後焚」的訊息方式。';
 
   @override
+  String get burnAfterReadDelayLabel => '閱後刪除延遲';
+
+  @override
+  String get burnAfterReadDelayHelp => '訊息被標記為已讀後，閱後即焚訊息還會保留多久。';
+
+  @override
+  String get burnAfterReadDelayImmediate => '立即刪除';
+
+  @override
+  String get burnAfterReadDelay5Seconds => '5 秒';
+
+  @override
+  String get burnAfterReadDelay10Seconds => '10 秒';
+
+  @override
+  String get burnAfterReadDelay30Seconds => '30 秒';
+
+  @override
+  String get burnAfterReadDelay1Minute => '1 分鐘';
+
+  @override
+  String get burnAfterReadDelay5Minutes => '5 分鐘';
+
+  @override
+  String get burnAfterReadDelay10Minutes => '10 分鐘';
+
+  @override
   String get antiSurveillanceGuardTitle => '反監控防護';
 
   @override
@@ -1284,6 +1518,186 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get connectionDetailsTooltip => '連線詳情';
+
+  @override
+  String get connectionStateOpen => '已連線';
+
+  @override
+  String get connectionStateConnecting => '連線中';
+
+  @override
+  String get connectionStateFailed => '失敗';
+
+  @override
+  String get connectionStateOffline => '離線';
+
+  @override
+  String get connectionStateClosed => '已關閉';
+
+  @override
+  String get connectionStateIdle => '閒置';
+
+  @override
+  String get connectionDetailsDeviceIdentityTitle => '裝置身分';
+
+  @override
+  String get connectionDetailsIdentityDescription =>
+      'X25519 金鑰材料只會產生一次，並持久保存在安全儲存中。';
+
+  @override
+  String connectionDetailsIdentityBootstrapFailed(Object error) {
+    return '裝置身分初始化失敗：$error';
+  }
+
+  @override
+  String get connectionDetailsNetworkPolicyTitle => '網路策略';
+
+  @override
+  String get connectionDetailsNetworkLanPreferred => '區域網路優先';
+
+  @override
+  String get connectionDetailsNetworkMobileData => '行動數據';
+
+  @override
+  String get connectionDetailsNetworkConnected => '已連線';
+
+  @override
+  String get connectionDetailsNetworkLanDescription => '區域網路路由可用，應優先用於 P2P 會話。';
+
+  @override
+  String get connectionDetailsNetworkFallbackDescription =>
+      '可在此監測基礎上進一步疊加手動 IP 與 TURN 備援。';
+
+  @override
+  String connectionDetailsNetworkMonitorFailed(Object error) {
+    return '網路監測失敗：$error';
+  }
+
+  @override
+  String get manualPeerSessionTitle => '手動對等會話';
+
+  @override
+  String get manualPeerSessionNoSelectionSubtitle => '選擇聯絡人，或貼上遠端 offer 以手動應答';
+
+  @override
+  String get manualPeerSessionInviteImportedSubtitle =>
+      '已匯入邀請。請複製 reply 資料包，或繼續交換原始 answer 與 ICE 載荷。';
+
+  @override
+  String get manualPeerSessionExchangePayloadsSubtitle =>
+      '交換 offer、answer 與 ICE 載荷';
+
+  @override
+  String manualPeerSessionSelectedBlockedSubtitle(Object name) {
+    return '已選擇 $name，但此聯絡人已被封鎖。';
+  }
+
+  @override
+  String manualPeerSessionSelectedReadySubtitle(Object name) {
+    return '已選擇 $name。點擊「連接」以產生 offer 與可直接傳送的邀請。';
+  }
+
+  @override
+  String get manualPeerSessionBlockedContactChip => '已封鎖聯絡人';
+
+  @override
+  String get manualPeerSessionRefreshOfferAction => '重新整理 Offer';
+
+  @override
+  String get manualPeerSessionCopyReplyAction => '複製 Reply';
+
+  @override
+  String get manualPeerSessionCopyInviteAction => '複製 Invite';
+
+  @override
+  String get manualPeerSessionCopyLinkAction => '複製連結';
+
+  @override
+  String manualPeerSessionTargetChip(Object name) {
+    return '目標 $name';
+  }
+
+  @override
+  String get manualPeerSessionOfferingChip => '發起方';
+
+  @override
+  String get manualPeerSessionAnsweringChip => '應答方';
+
+  @override
+  String manualPeerSessionQueuedIceChip(Object count) {
+    return '排隊中的 ICE $count';
+  }
+
+  @override
+  String get manualPeerSessionInputLabel =>
+      '貼上 invite、reply、offer、answer 或 ICE 載荷';
+
+  @override
+  String get manualPeerSessionInputHelp =>
+      '此欄位支援完整的 GungChat invite/reply 文字，以及原始訊號載荷。';
+
+  @override
+  String get manualPeerSessionStartOfferAction => '開始 Offer';
+
+  @override
+  String get manualPeerSessionNewOfferAction => '新增 Offer';
+
+  @override
+  String get manualPeerSessionApplyInputAction => '套用輸入';
+
+  @override
+  String get manualPeerSessionPasteInviteAction => '貼上 Invite';
+
+  @override
+  String get manualPeerSessionResetTooltip => '重設會話';
+
+  @override
+  String manualPeerSessionExpectedFingerprint(Object fingerprint) {
+    return '預期指紋：$fingerprint';
+  }
+
+  @override
+  String manualPeerSessionSessionLabel(Object id) {
+    return '會話 $id';
+  }
+
+  @override
+  String get manualPeerSessionAdvancedSignalsTitle => '進階訊號';
+
+  @override
+  String get manualPeerSessionHandshakeTimelineTitle => '握手時間線';
+
+  @override
+  String get manualPeerSessionCopySignalTooltip => '複製訊號';
+
+  @override
+  String manualPeerSessionSignalCopied(Object label) {
+    return '已複製 $label';
+  }
+
+  @override
+  String get manualPeerSessionSignalOfferLabel => '提議';
+
+  @override
+  String get manualPeerSessionSignalAnswerLabel => '應答';
+
+  @override
+  String get manualPeerSessionSignalIceLabel => 'ICE';
+
+  @override
+  String get manualPeerSessionSignalCallOfferLabel => '通話提議';
+
+  @override
+  String get manualPeerSessionSignalCallAnswerLabel => '通話應答';
+
+  @override
+  String get manualPeerSessionSignalCallIceLabel => '通話 ICE';
+
+  @override
+  String get manualPeerSessionSignalCallDeclineLabel => '拒絕通話';
+
+  @override
+  String get manualPeerSessionSignalCallHangupLabel => '掛斷通話';
 
   @override
   String get videoCallCouldNotStartLabel => '無法開始視訊通話';

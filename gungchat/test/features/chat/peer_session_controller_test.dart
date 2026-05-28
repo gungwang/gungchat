@@ -251,6 +251,7 @@ void main() {
           required targetAddress,
         }) async {},
         isBlockedFingerprint: (_) => false,
+        loadBurnAfterReadDelay: () => const Duration(seconds: 30),
       );
       addTearDown(controller.dispose);
       addTearDown(webRtcManager.dispose);
@@ -280,6 +281,71 @@ void main() {
       expect(webRtcManager.sentTexts, hasLength(1));
       expect(controller.state.lastEvent, 'Secure message sent.');
     });
+
+    test(
+      'schedules burn-after-read deletion after the configured delay',
+      () async {
+        final cryptoService = CryptoService();
+        final localIdentity = await _buildIdentity(cryptoService);
+        final webRtcManager = _FakeWebRtcManager();
+        final messageService = _FakeMessageService(
+          cryptoService: cryptoService,
+        );
+        final controller = PeerSessionController(
+          loadIdentity: () async => localIdentity,
+          loadMessageService: () async => messageService,
+          loadVoiceMessageService: () => _UnusedVoiceMessageService(),
+          loadAttachmentMessageService: () => _UnusedAttachmentMessageService(),
+          refreshConversation: (_) {},
+          reactionService: const ReactionService(),
+          webRtcManager: webRtcManager,
+          signalingService: const ManualSignalingService(),
+          cryptoService: cryptoService,
+          dispatchLocalSignal: ({
+            required encodedSignal,
+            required targetAddress,
+          }) async {},
+          isBlockedFingerprint: (_) => false,
+          loadBurnAfterReadDelay: () => const Duration(seconds: 30),
+        );
+        addTearDown(controller.dispose);
+        addTearDown(webRtcManager.dispose);
+
+        final message = Message(
+          id: 'burn-after-read-1',
+          conversationId: 'peer:test',
+          senderId: 'peer-device',
+          body: 'secret',
+          type: MessageType.text,
+          deliveryState: MessageDeliveryState.delivered,
+          createdAt: DateTime.now(),
+          isOutgoing: false,
+          burnAfterRead: true,
+        );
+        messageService.seedMessage(message);
+
+        final beforeRead = DateTime.now();
+        await controller.markMessagesRead(
+          conversationId: message.conversationId,
+          messageIds: [message.id],
+          sendReceipt: false,
+        );
+
+        final updatedMessage = await messageService.getMessage(message.id);
+        expect(updatedMessage, isNotNull);
+        expect(messageService.deletedMessageIds, isEmpty);
+        expect(updatedMessage!.deliveryState, MessageDeliveryState.read);
+        expect(updatedMessage.expiresAt, isNotNull);
+        expect(
+          updatedMessage.expiresAt!.difference(beforeRead),
+          greaterThanOrEqualTo(const Duration(seconds: 29)),
+        );
+        expect(
+          updatedMessage.expiresAt!.difference(beforeRead),
+          lessThan(const Duration(seconds: 31)),
+        );
+      },
+    );
   });
 }
 
@@ -354,8 +420,15 @@ class _FakeMessageService implements MessageService {
 
   final CryptoService _cryptoService;
   final List<String> createdLocalBodies = <String>[];
+  final Map<String, Message> messages = <String, Message>{};
   final Map<String, MessageDeliveryState> deliveryStates =
       <String, MessageDeliveryState>{};
+  final List<String> deletedMessageIds = <String>[];
+
+  void seedMessage(Message message) {
+    messages[message.id] = message;
+    deliveryStates[message.id] = message.deliveryState;
+  }
 
   @override
   Future<Message> createLocalMessage({
@@ -390,6 +463,7 @@ class _FakeMessageService implements MessageService {
       audioDurationMs: audioDurationMs,
       attachments: attachments,
     );
+    messages[message.id] = message;
     deliveryStates[message.id] = deliveryState;
     return message;
   }
@@ -411,6 +485,35 @@ class _FakeMessageService implements MessageService {
     MessageDeliveryState deliveryState,
   ) async {
     deliveryStates[messageId] = deliveryState;
+    final message = messages[messageId];
+    if (message != null) {
+      messages[messageId] = message.copyWith(deliveryState: deliveryState);
+    }
+  }
+
+  @override
+  Future<Message?> getMessage(String messageId) async {
+    return messages[messageId];
+  }
+
+  @override
+  Future<void> updateMessageExpiry({
+    required String messageId,
+    DateTime? expiresAt,
+  }) async {
+    final message = messages[messageId];
+    if (message == null) {
+      return;
+    }
+    messages[messageId] = expiresAt == null
+        ? message.copyWith(clearExpiresAt: true)
+        : message.copyWith(expiresAt: expiresAt);
+  }
+
+  @override
+  Future<void> deleteMessage(String messageId) async {
+    deletedMessageIds.add(messageId);
+    messages.remove(messageId);
   }
 
   @override

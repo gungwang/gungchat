@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:connectivity_plus/connectivity_plus.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -14,6 +15,7 @@ import '../../core/accessibility/a11y_helper.dart';
 import '../../core/encryption/key_manager.dart';
 import '../../l10n/l10n.dart';
 import '../../core/networking/network_monitor.dart';
+import '../../core/networking/signaling_service.dart';
 import '../../core/networking/webrtc_manager.dart';
 import '../../core/text/spoiler_renderer.dart';
 import '../../media/media_gallery_screen.dart';
@@ -993,6 +995,7 @@ class _ChatScreenState extends ConsumerState<ChatScreen> {
     ref.invalidate(contactBookProvider);
     ref.invalidate(blockedContactsProvider);
     ref.invalidate(readReceiptsEnabledProvider);
+    ref.invalidate(burnAfterReadDelayProvider);
     ref.invalidate(localPresenceStatusProvider);
     ref.invalidate(linkPreviewsEnabledProvider);
     ref.invalidate(customStatusTextProvider);
@@ -2286,6 +2289,7 @@ class _PeerSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
     final showConnectAction = invitationDraft == null ||
         invitationDraft!.kind != PeerInvitationDraftKind.reply;
 
@@ -2295,8 +2299,8 @@ class _PeerSessionCard extends StatelessWidget {
             sessionState.isSessionActive || selectedContact != null,
         tilePadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
         childrenPadding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-        title: const Text('Manual Peer Session'),
-        subtitle: Text(_subtitleForState(sessionState, selectedContact)),
+        title: Text(l10n.manualPeerSessionTitle),
+        subtitle: Text(_subtitleForState(context, sessionState, selectedContact)),
         trailing: _StateChip(state: sessionState),
         children: [
           if (selectedContact != null && invitationDraft != null) ...[
@@ -2332,7 +2336,7 @@ class _PeerSessionCard extends StatelessWidget {
                       runSpacing: 8,
                       children: [
                         if (isTargetBlocked)
-                          const Chip(label: Text('Blocked contact')),
+                          Chip(label: Text(l10n.manualPeerSessionBlockedContactChip)),
                         if (showConnectAction)
                           FilledButton.icon(
                             onPressed: isTargetBlocked ? null : onConnect,
@@ -2340,21 +2344,25 @@ class _PeerSessionCard extends StatelessWidget {
                             label: Text(
                               invitationDraft!.kind ==
                                       PeerInvitationDraftKind.connect
-                                  ? 'Connect'
-                                  : 'Refresh Offer',
+                                  ? l10n.composerConnectAction
+                                  : l10n.manualPeerSessionRefreshOfferAction,
                             ),
                           ),
                         if (onCopyInvitation != null)
                           FilledButton.tonalIcon(
                             onPressed: onCopyInvitation,
                             icon: const Icon(Icons.copy_all_outlined),
-                            label: Text(invitationDraft!.copyActionLabel),
+                            label: Text(
+                              invitationDraft!.isReply
+                                  ? l10n.manualPeerSessionCopyReplyAction
+                                  : l10n.manualPeerSessionCopyInviteAction,
+                            ),
                           ),
                         if (onCopyLink != null)
                           FilledButton.tonalIcon(
                             onPressed: onCopyLink,
                             icon: const Icon(Icons.phonelink_outlined),
-                            label: const Text('Copy Link'),
+                            label: Text(l10n.manualPeerSessionCopyLinkAction),
                           ),
                       ],
                     ),
@@ -2371,15 +2379,21 @@ class _PeerSessionCard extends StatelessWidget {
               runSpacing: 8,
               children: [
                 if (selectedContact != null)
-                  Chip(label: Text('Target ${selectedContact!.displayName}')),
+                  Chip(
+                    label: Text(
+                      l10n.manualPeerSessionTargetChip(
+                        selectedContact!.displayName,
+                      ),
+                    ),
+                  ),
                 if (sessionState.targetAddress != null)
                   Chip(label: Text(sessionState.targetAddress!)),
                 if (sessionState.role != null)
                   Chip(
                     label: Text(
                       sessionState.role == PeerSessionRole.initiator
-                          ? 'Offering'
-                          : 'Answering',
+                          ? l10n.manualPeerSessionOfferingChip
+                          : l10n.manualPeerSessionAnsweringChip,
                     ),
                   ),
                 if (sessionState.remoteFingerprint != null)
@@ -2387,16 +2401,15 @@ class _PeerSessionCard extends StatelessWidget {
                 if (sessionState.remotePresenceStatus != null)
                   Chip(
                     label: Text(
-                      sessionState.remotePresenceStatus ==
-                              PeerPresenceStatus.hidden
-                          ? 'Presence hidden'
-                          : sessionState.remotePresenceStatus!.label,
+                      _presenceLabel(context, sessionState.remotePresenceStatus!),
                     ),
                   ),
                 if (sessionState.pendingRemoteIceCount > 0)
                   Chip(
                     label: Text(
-                      'Queued ICE ${sessionState.pendingRemoteIceCount}',
+                      l10n.manualPeerSessionQueuedIceChip(
+                        sessionState.pendingRemoteIceCount.toString(),
+                      ),
                     ),
                   ),
               ],
@@ -2407,14 +2420,14 @@ class _PeerSessionCard extends StatelessWidget {
             controller: signalController,
             maxLines: 5,
             minLines: 3,
-            decoration: const InputDecoration(
-              labelText: 'Paste invite, reply, offer, answer, or ICE payload',
+            decoration: InputDecoration(
+              labelText: l10n.manualPeerSessionInputLabel,
               border: OutlineInputBorder(),
             ),
           ),
           const SizedBox(height: 12),
           Text(
-            'This field accepts full GungChat invite or reply text as well as raw signaling payloads.',
+            l10n.manualPeerSessionInputHelp,
             style: theme.textTheme.bodySmall,
           ),
           const SizedBox(height: 12),
@@ -2425,7 +2438,9 @@ class _PeerSessionCard extends StatelessWidget {
                   onPressed: isTargetBlocked ? null : onStartOffer,
                   icon: const Icon(Icons.outbox_outlined),
                   label: Text(
-                    selectedContact == null ? 'Start Offer' : 'New Offer',
+                    selectedContact == null
+                        ? l10n.manualPeerSessionStartOfferAction
+                        : l10n.manualPeerSessionNewOfferAction,
                   ),
                 ),
               ),
@@ -2441,18 +2456,18 @@ class _PeerSessionCard extends StatelessWidget {
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
                       : const Icon(Icons.download_outlined),
-                  label: const Text('Apply Input'),
+                  label: Text(l10n.manualPeerSessionApplyInputAction),
                 ),
               ),
               const SizedBox(width: 12),
               FilledButton.tonalIcon(
                 onPressed: sessionState.isApplyingSignal ? null : onPasteInvite,
                 icon: const Icon(Icons.content_paste_go_outlined),
-                label: const Text('Paste Invite'),
+                label: Text(l10n.manualPeerSessionPasteInviteAction),
               ),
               const SizedBox(width: 12),
               IconButton(
-                tooltip: 'Reset session',
+                tooltip: l10n.manualPeerSessionResetTooltip,
                 onPressed: sessionState.isSessionActive ? onReset : null,
                 icon: const Icon(Icons.restart_alt),
               ),
@@ -2478,14 +2493,16 @@ class _PeerSessionCard extends StatelessWidget {
               sessionState.remoteFingerprint == null) ...[
             const SizedBox(height: 8),
             Text(
-              'Expected fingerprint: ${sessionState.expectedRemoteFingerprint}',
+              l10n.manualPeerSessionExpectedFingerprint(
+                sessionState.expectedRemoteFingerprint!,
+              ),
               style: theme.textTheme.bodySmall,
             ),
           ],
           if (sessionState.sessionId != null) ...[
             const SizedBox(height: 12),
             Text(
-              'Session ${sessionState.sessionId}',
+              l10n.manualPeerSessionSessionLabel(sessionState.sessionId!),
               style: theme.textTheme.labelLarge,
             ),
           ],
@@ -2494,7 +2511,7 @@ class _PeerSessionCard extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Advanced signals',
+                l10n.manualPeerSessionAdvancedSignalsTitle,
                 style: theme.textTheme.titleSmall,
               ),
             ),
@@ -2517,7 +2534,7 @@ class _PeerSessionCard extends StatelessWidget {
             Align(
               alignment: Alignment.centerLeft,
               child: Text(
-                'Handshake timeline',
+                l10n.manualPeerSessionHandshakeTimelineTitle,
                 style: theme.textTheme.titleSmall,
               ),
             ),
@@ -2543,26 +2560,44 @@ class _PeerSessionCard extends StatelessWidget {
     );
   }
 
+  String _presenceLabel(BuildContext context, PeerPresenceStatus status) {
+    final l10n = context.l10n;
+    switch (status) {
+      case PeerPresenceStatus.online:
+        return l10n.presenceOnline;
+      case PeerPresenceStatus.away:
+        return l10n.presenceAway;
+      case PeerPresenceStatus.hidden:
+        return l10n.presenceHidden;
+    }
+  }
+
   String _subtitleForState(
+    BuildContext context,
     PeerSessionState sessionState,
     Contact? selectedContact,
   ) {
+    final l10n = context.l10n;
     if (sessionState.isTransportReady) {
-      return 'Secure channel open';
+      return l10n.secureChannelOpen;
     }
     if (sessionState.isSessionActive) {
       if (sessionState.role == PeerSessionRole.responder) {
-        return 'Invite imported. Copy the reply bundle or continue exchanging raw answer and ICE payloads.';
+        return l10n.manualPeerSessionInviteImportedSubtitle;
       }
-      return 'Exchange offer, answer, and ICE payloads';
+      return l10n.manualPeerSessionExchangePayloadsSubtitle;
     }
     if (selectedContact != null) {
       if (isTargetBlocked) {
-        return 'Selected ${selectedContact.displayName}, but this contact is blocked.';
+        return l10n.manualPeerSessionSelectedBlockedSubtitle(
+          selectedContact.displayName,
+        );
       }
-      return 'Selected ${selectedContact.displayName}. Connect to generate an offer and a ready-to-send invite.';
+      return l10n.manualPeerSessionSelectedReadySubtitle(
+        selectedContact.displayName,
+      );
     }
-    return 'Select a contact or paste a remote offer to answer manually';
+    return l10n.manualPeerSessionNoSelectionSubtitle;
   }
 }
 
@@ -2574,6 +2609,7 @@ class _SignalTile extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
     return DecoratedBox(
       decoration: BoxDecoration(
@@ -2589,7 +2625,7 @@ class _SignalTile extends StatelessWidget {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(signal.label, style: theme.textTheme.titleSmall),
+                  Text(_signalLabel(context), style: theme.textTheme.titleSmall),
                   const SizedBox(height: 4),
                   Text(
                     signal.encoded,
@@ -2602,12 +2638,18 @@ class _SignalTile extends StatelessWidget {
             ),
             const SizedBox(width: 8),
             IconButton(
-              tooltip: 'Copy signal',
+              tooltip: l10n.manualPeerSessionCopySignalTooltip,
               onPressed: () async {
                 await Clipboard.setData(ClipboardData(text: signal.encoded));
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text('${signal.label} copied')),
+                    SnackBar(
+                      content: Text(
+                        l10n.manualPeerSessionSignalCopied(
+                          _signalLabel(context),
+                        ),
+                      ),
+                    ),
                   );
                 }
               },
@@ -2617,6 +2659,28 @@ class _SignalTile extends StatelessWidget {
         ),
       ),
     );
+  }
+
+  String _signalLabel(BuildContext context) {
+    final l10n = context.l10n;
+    switch (signal.type) {
+      case SignalingEnvelopeType.offer:
+        return l10n.manualPeerSessionSignalOfferLabel;
+      case SignalingEnvelopeType.answer:
+        return l10n.manualPeerSessionSignalAnswerLabel;
+      case SignalingEnvelopeType.iceCandidate:
+        return l10n.manualPeerSessionSignalIceLabel;
+      case SignalingEnvelopeType.callOffer:
+        return l10n.manualPeerSessionSignalCallOfferLabel;
+      case SignalingEnvelopeType.callAnswer:
+        return l10n.manualPeerSessionSignalCallAnswerLabel;
+      case SignalingEnvelopeType.callIceCandidate:
+        return l10n.manualPeerSessionSignalCallIceLabel;
+      case SignalingEnvelopeType.callDecline:
+        return l10n.manualPeerSessionSignalCallDeclineLabel;
+      case SignalingEnvelopeType.callHangup:
+        return l10n.manualPeerSessionSignalCallHangupLabel;
+    }
   }
 }
 
@@ -2704,22 +2768,32 @@ class _StateChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final l10n = context.l10n;
     final (label, backgroundColor) = switch (state.connectionState) {
-      WebRtcSessionState.open => ('Open', colorScheme.primaryContainer),
+      WebRtcSessionState.open => (
+          l10n.connectionStateOpen,
+          colorScheme.primaryContainer,
+        ),
       WebRtcSessionState.connecting => (
-          'Connecting',
+          l10n.connectionStateConnecting,
           colorScheme.secondaryContainer,
         ),
-      WebRtcSessionState.failed => ('Failed', colorScheme.errorContainer),
+      WebRtcSessionState.failed => (
+          l10n.connectionStateFailed,
+          colorScheme.errorContainer,
+        ),
       WebRtcSessionState.disconnected => (
-          'Offline',
+          l10n.connectionStateOffline,
           colorScheme.surfaceContainerHighest,
         ),
       WebRtcSessionState.closed => (
-          'Closed',
+          l10n.connectionStateClosed,
           colorScheme.surfaceContainerHighest,
         ),
-      WebRtcSessionState.idle => ('Idle', colorScheme.surfaceContainerHighest),
+      WebRtcSessionState.idle => (
+          l10n.connectionStateIdle,
+          colorScheme.surfaceContainerHighest,
+        ),
     };
 
     return Chip(
@@ -2736,6 +2810,7 @@ class _IdentityCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -2745,21 +2820,22 @@ class _IdentityCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Device identity',
+                  l10n.connectionDetailsDeviceIdentityTitle,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                Text('Fingerprint: ${identity.fingerprint}'),
+                Text('${l10n.fingerprintLabel}: ${identity.fingerprint}'),
                 const SizedBox(height: 4),
-                const Text(
-                  'X25519 key material is generated once and persisted in secure storage.',
+                Text(
+                  l10n.connectionDetailsIdentityDescription,
                 ),
               ],
             );
           },
           loading: () => const LinearProgressIndicator(),
-          error: (error, stackTrace) =>
-              Text('Identity bootstrap failed: $error'),
+          error: (error, stackTrace) => Text(
+            l10n.connectionDetailsIdentityBootstrapFailed(error.toString()),
+          ),
         ),
       ),
     );
@@ -2773,6 +2849,7 @@ class _NetworkCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(16),
@@ -2782,24 +2859,40 @@ class _NetworkCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  'Network policy',
+                  l10n.connectionDetailsNetworkPolicyTitle,
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
                 const SizedBox(height: 8),
-                Text(snapshot.summary),
+                Text(_summaryLabel(context, snapshot)),
                 const SizedBox(height: 4),
                 Text(
                   snapshot.prefersLan
-                      ? 'LAN routing is available and should be preferred for P2P sessions.'
-                      : 'Manual IP and TURN fallback can be layered on top of this monitor next.',
+                      ? l10n.connectionDetailsNetworkLanDescription
+                      : l10n.connectionDetailsNetworkFallbackDescription,
                 ),
               ],
             );
           },
           loading: () => const LinearProgressIndicator(),
-          error: (error, stackTrace) => Text('Network monitor failed: $error'),
+          error: (error, stackTrace) => Text(
+            l10n.connectionDetailsNetworkMonitorFailed(error.toString()),
+          ),
         ),
       ),
     );
+  }
+
+  String _summaryLabel(BuildContext context, NetworkSnapshot snapshot) {
+    final l10n = context.l10n;
+    if (!snapshot.isOnline) {
+      return l10n.connectionStateOffline;
+    }
+    if (snapshot.prefersLan) {
+      return l10n.connectionDetailsNetworkLanPreferred;
+    }
+    if (snapshot.results.contains(ConnectivityResult.mobile)) {
+      return l10n.connectionDetailsNetworkMobileData;
+    }
+    return l10n.connectionDetailsNetworkConnected;
   }
 }
