@@ -551,6 +551,228 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get cancelReplyTooltip => '取消回复';
+
+  @override
+  String get composerSendAction => '发送';
+
+  @override
+  String get composerSaveLocalAction => '保存本地消息';
+
+  @override
+  String get composerWaitForSecureChannel => '等待安全通道';
+
+  @override
+  String get composerSaveMessageEditAction => '保存修改';
+
+  @override
+  String get composerConnectAction => '连接';
+
+  @override
+  String get composerBurnAfterReadLabel => '阅后即焚';
+
+  @override
+  String get composerRecordVoiceTooltip => '录制语音';
+
+  @override
+  String get composerStopAndSendVoiceTooltip => '停止并发送语音';
+
+  @override
+  String get composerMoreActionsTooltip => '更多操作';
+
+  @override
+  String get composerBootstrapHint => '输入本地加密消息草稿...';
+
+  @override
+  String get composerPeerHint => '输入要发送给对方的加密消息...';
+
+  @override
+  String get composerEditHint => '修改这条加密消息...';
+
+  @override
+  String get composerHelpHint => '输入 /help 查看本地命令，或完成信令交换后即可发送。';
+
+  @override
+  String get composerBlockedHint => '该联系人已被屏蔽。斜杠命令仍可本地执行。';
+
+  @override
+  String get composerOpenSessionForStickers => '发送贴纸前请先建立安全会话。';
+
+  @override
+  String get composerFinishSignalExchangeWarning => '发送点对点消息前请先完成信令交换。';
+
+  @override
+  String composerOpenSessionBeforeSend(Object name) {
+    return '发送前请先与 $name 建立或接受会话。';
+  }
+
+  @override
+  String get composerRecordingHint => '正在录制语音...准备好后点击 停止并发送。最长 2 分钟。';
+
+  @override
+  String get composerOpenChannelBeforeRecording => '录制语音前请先打开安全通道。';
+
+  @override
+  String get composerMicrophoneError => '无法访问麦克风。请检查应用权限和设备麦克风设置。';
+
+  @override
+  String get composerEditLabel => '编辑安全消息';
+
+  @override
+  String get composerSecureLabel => '安全对端消息';
+
+  @override
+  String get composerBootstrapLabel => '引导消息';
+
+  @override
+  String get composerPeerLabel => '对端消息';
+
+  @override
+  String composerTypingStatus(Object name) {
+    return '$name 正在输入...';
+  }
+
+  @override
+  String get attachmentMenuGallery => '图库';
+
+  @override
+  String get attachmentMenuFiles => '文件';
+
+  @override
+  String get attachmentMenuLocation => '位置';
+
+  @override
+  String get attachmentMenuContact => '联系人';
+
+  @override
+  String get attachmentMenuSticker => '贴纸';
+
+  @override
+  String get stickerPickerTitle => '贴纸';
+
+  @override
+  String get stickerLabelSmile => '微笑';
+
+  @override
+  String get stickerLabelHeart => '爱心';
+
+  @override
+  String get stickerLabelThumbs => '点赞';
+
+  @override
+  String get stickerLabelParty => '庆祝';
+
+  @override
+  String get stickerLabelFire => '火';
+
+  @override
+  String get stickerLabelSad => '难过';
+
+  @override
+  String get stickerLabelOk => 'OK';
+
+  @override
+  String get stickerLabelClap => '鼓掌';
+
+  @override
+  String get messageBubbleQuotedMessage => '引用消息';
+
+  @override
+  String get messageBubbleStarTooltip => '标星消息';
+
+  @override
+  String get messageBubbleRemoveStarTooltip => '取消标星';
+
+  @override
+  String get messageBubbleActionsTooltip => '消息操作';
+
+  @override
+  String get messageBubbleEditAction => '编辑消息';
+
+  @override
+  String get messageBubbleDeleteForEveryoneAction => '为所有人删除';
+
+  @override
+  String get messageBubbleErasePermanentlyAction => '永久抹除';
+
+  @override
+  String get messageBubbleAddReactionTooltip => '添加反应';
+
+  @override
+  String get messageBubbleMessageDeletedLabel => '消息已删除';
+
+  @override
+  String get messageBubbleBurnAfterReadBadge => '阅后即焚';
+
+  @override
+  String get messageBubblePersistentBadge => '持久保存';
+
+  @override
+  String get messageBubbleDeletedMarker => '已删除';
+
+  @override
+  String get messageBubbleEditedMarker => '已编辑';
+
+  @override
+  String get messageBubbleSpoilerLabel => '剧透';
+
+  @override
+  String get messageBubbleSpoilerHint => '剧透内容，点击显示';
+
+  @override
+  String get messageBubblePlayVoiceTooltip => '播放语音消息';
+
+  @override
+  String get messageBubbleStopVoiceTooltip => '停止语音消息';
+
+  @override
+  String get messageBubbleVoiceMessageLabel => '语音消息';
+
+  @override
+  String get messageBubbleSharedLocationLabel => '共享位置';
+
+  @override
+  String get messageBubbleSharedContactLabel => '共享联系人';
+
+  @override
+  String messageBubbleLatLngLabel(Object lat, Object lng) {
+    return '纬度 $lat，经度 $lng';
+  }
+
+  @override
+  String get messageBubbleLoadingLinkPreview => '正在加载链接预览...';
+
+  @override
+  String get messageBubbleAttachmentSentAnnouncement => '附件已发送';
+
+  @override
+  String get messageBubbleQuickReplyInsertedAnnouncement => '已插入快捷回复';
+
+  @override
+  String get messageBubbleDialogCancel => '取消';
+
+  @override
+  String get messageBubbleDialogClose => '关闭';
+
+  @override
+  String get messageBubbleDeleteForEveryoneTitle => '为所有人删除这条消息？';
+
+  @override
+  String get messageBubbleDeleteForEveryoneBody => '会话中会显示一个已删除占位符替代该消息。';
+
+  @override
+  String get messageBubbleErasePermanentlyTitle => '永久抹除这条消息？';
+
+  @override
+  String get messageBubbleErasePermanentlyBody => '将完全删除该消息记录，而不会显示已删除占位符。';
+
+  @override
+  String get messageBubbleEraseLabel => '抹除';
+
+  @override
+  String get messageBubbleDeleteLabel => '删除';
+
+  @override
+  String get messageBubbleOriginalMessageGone => '原消息已不可用。';
 }
 
 /// The translations for Chinese, as used in Taiwan (`zh_TW`).
@@ -1101,4 +1323,226 @@ class AppLocalizationsZhTw extends AppLocalizationsZh {
 
   @override
   String get cancelReplyTooltip => '取消回覆';
+
+  @override
+  String get composerSendAction => '傳送';
+
+  @override
+  String get composerSaveLocalAction => '儲存本地訊息';
+
+  @override
+  String get composerWaitForSecureChannel => '等待安全通道';
+
+  @override
+  String get composerSaveMessageEditAction => '儲存修改';
+
+  @override
+  String get composerConnectAction => '連接';
+
+  @override
+  String get composerBurnAfterReadLabel => '閱後即焚';
+
+  @override
+  String get composerRecordVoiceTooltip => '錄製語音';
+
+  @override
+  String get composerStopAndSendVoiceTooltip => '停止並傳送語音';
+
+  @override
+  String get composerMoreActionsTooltip => '更多操作';
+
+  @override
+  String get composerBootstrapHint => '輸入本地加密訊息草稿...';
+
+  @override
+  String get composerPeerHint => '輸入要傳送給對方的加密訊息...';
+
+  @override
+  String get composerEditHint => '修改這條加密訊息...';
+
+  @override
+  String get composerHelpHint => '輸入 /help 查看本地指令，或完成信號交換後即可傳送。';
+
+  @override
+  String get composerBlockedHint => '該聯絡人已被封鎖。斜線指令仍可本地執行。';
+
+  @override
+  String get composerOpenSessionForStickers => '傳送貼圖前請先建立安全會話。';
+
+  @override
+  String get composerFinishSignalExchangeWarning => '傳送點對點訊息前請先完成信號交換。';
+
+  @override
+  String composerOpenSessionBeforeSend(Object name) {
+    return '傳送前請先與 $name 建立或接受會話。';
+  }
+
+  @override
+  String get composerRecordingHint => '正在錄製語音...準備好後點選 停止並傳送。最長 2 分鐘。';
+
+  @override
+  String get composerOpenChannelBeforeRecording => '錄製語音前請先開啟安全通道。';
+
+  @override
+  String get composerMicrophoneError => '無法存取麥克風。請檢查應用權限與裝置麥克風設定。';
+
+  @override
+  String get composerEditLabel => '編輯安全訊息';
+
+  @override
+  String get composerSecureLabel => '安全對端訊息';
+
+  @override
+  String get composerBootstrapLabel => '引導訊息';
+
+  @override
+  String get composerPeerLabel => '對端訊息';
+
+  @override
+  String composerTypingStatus(Object name) {
+    return '$name 正在輸入...';
+  }
+
+  @override
+  String get attachmentMenuGallery => '圖庫';
+
+  @override
+  String get attachmentMenuFiles => '檔案';
+
+  @override
+  String get attachmentMenuLocation => '位置';
+
+  @override
+  String get attachmentMenuContact => '聯絡人';
+
+  @override
+  String get attachmentMenuSticker => '貼圖';
+
+  @override
+  String get stickerPickerTitle => '貼圖';
+
+  @override
+  String get stickerLabelSmile => '微笑';
+
+  @override
+  String get stickerLabelHeart => '愛心';
+
+  @override
+  String get stickerLabelThumbs => '點讚';
+
+  @override
+  String get stickerLabelParty => '慶祝';
+
+  @override
+  String get stickerLabelFire => '火';
+
+  @override
+  String get stickerLabelSad => '難過';
+
+  @override
+  String get stickerLabelOk => 'OK';
+
+  @override
+  String get stickerLabelClap => '鼓掌';
+
+  @override
+  String get messageBubbleQuotedMessage => '引用訊息';
+
+  @override
+  String get messageBubbleStarTooltip => '標記星號';
+
+  @override
+  String get messageBubbleRemoveStarTooltip => '取消星號';
+
+  @override
+  String get messageBubbleActionsTooltip => '訊息操作';
+
+  @override
+  String get messageBubbleEditAction => '編輯訊息';
+
+  @override
+  String get messageBubbleDeleteForEveryoneAction => '為所有人刪除';
+
+  @override
+  String get messageBubbleErasePermanentlyAction => '永久抹除';
+
+  @override
+  String get messageBubbleAddReactionTooltip => '新增反應';
+
+  @override
+  String get messageBubbleMessageDeletedLabel => '訊息已刪除';
+
+  @override
+  String get messageBubbleBurnAfterReadBadge => '閱後即焚';
+
+  @override
+  String get messageBubblePersistentBadge => '持久保存';
+
+  @override
+  String get messageBubbleDeletedMarker => '已刪除';
+
+  @override
+  String get messageBubbleEditedMarker => '已編輯';
+
+  @override
+  String get messageBubbleSpoilerLabel => '雷點';
+
+  @override
+  String get messageBubbleSpoilerHint => '雷點內容，點選顯示';
+
+  @override
+  String get messageBubblePlayVoiceTooltip => '播放語音訊息';
+
+  @override
+  String get messageBubbleStopVoiceTooltip => '停止語音訊息';
+
+  @override
+  String get messageBubbleVoiceMessageLabel => '語音訊息';
+
+  @override
+  String get messageBubbleSharedLocationLabel => '分享位置';
+
+  @override
+  String get messageBubbleSharedContactLabel => '分享聯絡人';
+
+  @override
+  String messageBubbleLatLngLabel(Object lat, Object lng) {
+    return '緯度 $lat，經度 $lng';
+  }
+
+  @override
+  String get messageBubbleLoadingLinkPreview => '正在載入連結預覽...';
+
+  @override
+  String get messageBubbleAttachmentSentAnnouncement => '附件已傳送';
+
+  @override
+  String get messageBubbleQuickReplyInsertedAnnouncement => '已插入快捷回覆';
+
+  @override
+  String get messageBubbleDialogCancel => '取消';
+
+  @override
+  String get messageBubbleDialogClose => '關閉';
+
+  @override
+  String get messageBubbleDeleteForEveryoneTitle => '為所有人刪除這條訊息？';
+
+  @override
+  String get messageBubbleDeleteForEveryoneBody => '會話中會顯示一個已刪除佔位符代替該訊息。';
+
+  @override
+  String get messageBubbleErasePermanentlyTitle => '永久抹除這條訊息？';
+
+  @override
+  String get messageBubbleErasePermanentlyBody => '將完全刪除該訊息記錄，而不會顯示已刪除佔位符。';
+
+  @override
+  String get messageBubbleEraseLabel => '抹除';
+
+  @override
+  String get messageBubbleDeleteLabel => '刪除';
+
+  @override
+  String get messageBubbleOriginalMessageGone => '原訊息已不可用。';
 }

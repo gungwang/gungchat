@@ -574,4 +574,240 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get cancelReplyTooltip => 'Cancel reply';
+
+  @override
+  String get composerSendAction => 'Send';
+
+  @override
+  String get composerSaveLocalAction => 'Save Local Message';
+
+  @override
+  String get composerWaitForSecureChannel => 'Wait For Secure Channel';
+
+  @override
+  String get composerSaveMessageEditAction => 'Save Message Edit';
+
+  @override
+  String get composerConnectAction => 'Connect';
+
+  @override
+  String get composerBurnAfterReadLabel => 'Burn after read';
+
+  @override
+  String get composerRecordVoiceTooltip => 'Record voice';
+
+  @override
+  String get composerStopAndSendVoiceTooltip => 'Stop and send voice';
+
+  @override
+  String get composerMoreActionsTooltip => 'More actions';
+
+  @override
+  String get composerBootstrapHint => 'Type a local encrypted message draft...';
+
+  @override
+  String get composerPeerHint =>
+      'Type an encrypted message for the active peer session...';
+
+  @override
+  String get composerEditHint =>
+      'Update your encrypted message for the active peer session...';
+
+  @override
+  String get composerHelpHint =>
+      'Type /help for local commands, or complete the signal exchange to enable sending.';
+
+  @override
+  String get composerBlockedHint =>
+      'This contact is blocked. Slash commands still run locally.';
+
+  @override
+  String get composerOpenSessionForStickers =>
+      'Open a secure session before sending stickers.';
+
+  @override
+  String get composerFinishSignalExchangeWarning =>
+      'Finish the signal exchange before sending peer messages.';
+
+  @override
+  String composerOpenSessionBeforeSend(Object name) {
+    return 'Open or answer a session with $name before sending.';
+  }
+
+  @override
+  String get composerRecordingHint =>
+      'Recording voice message... tap Stop & Send when ready. Up to 2 minutes.';
+
+  @override
+  String get composerOpenChannelBeforeRecording =>
+      'Open the secure channel before recording voice messages.';
+
+  @override
+  String get composerMicrophoneError =>
+      'Could not access the microphone. Check app permissions and device microphone settings.';
+
+  @override
+  String get composerEditLabel => 'Edit secure message';
+
+  @override
+  String get composerSecureLabel => 'Secure peer message';
+
+  @override
+  String get composerBootstrapLabel => 'Bootstrap message';
+
+  @override
+  String get composerPeerLabel => 'Peer message';
+
+  @override
+  String composerTypingStatus(Object name) {
+    return '$name is typing...';
+  }
+
+  @override
+  String get attachmentMenuGallery => 'Gallery';
+
+  @override
+  String get attachmentMenuFiles => 'Files';
+
+  @override
+  String get attachmentMenuLocation => 'Location';
+
+  @override
+  String get attachmentMenuContact => 'Contact';
+
+  @override
+  String get attachmentMenuSticker => 'Sticker';
+
+  @override
+  String get stickerPickerTitle => 'Stickers';
+
+  @override
+  String get stickerLabelSmile => 'Smile';
+
+  @override
+  String get stickerLabelHeart => 'Heart';
+
+  @override
+  String get stickerLabelThumbs => 'Thumbs up';
+
+  @override
+  String get stickerLabelParty => 'Party';
+
+  @override
+  String get stickerLabelFire => 'Fire';
+
+  @override
+  String get stickerLabelSad => 'Sad';
+
+  @override
+  String get stickerLabelOk => 'OK';
+
+  @override
+  String get stickerLabelClap => 'Clap';
+
+  @override
+  String get messageBubbleQuotedMessage => 'Quoted message';
+
+  @override
+  String get messageBubbleStarTooltip => 'Star message';
+
+  @override
+  String get messageBubbleRemoveStarTooltip => 'Remove star';
+
+  @override
+  String get messageBubbleActionsTooltip => 'Message actions';
+
+  @override
+  String get messageBubbleEditAction => 'Edit message';
+
+  @override
+  String get messageBubbleDeleteForEveryoneAction => 'Delete for everyone';
+
+  @override
+  String get messageBubbleErasePermanentlyAction => 'Erase permanently';
+
+  @override
+  String get messageBubbleAddReactionTooltip => 'Add reaction';
+
+  @override
+  String get messageBubbleMessageDeletedLabel => 'Message deleted';
+
+  @override
+  String get messageBubbleBurnAfterReadBadge => 'Burn-after-read';
+
+  @override
+  String get messageBubblePersistentBadge => 'Persistent';
+
+  @override
+  String get messageBubbleDeletedMarker => 'deleted';
+
+  @override
+  String get messageBubbleEditedMarker => 'edited';
+
+  @override
+  String get messageBubbleSpoilerLabel => 'Spoiler';
+
+  @override
+  String get messageBubbleSpoilerHint => 'Spoiler, tap to reveal';
+
+  @override
+  String get messageBubblePlayVoiceTooltip => 'Play voice message';
+
+  @override
+  String get messageBubbleStopVoiceTooltip => 'Stop voice message';
+
+  @override
+  String get messageBubbleVoiceMessageLabel => 'Voice message';
+
+  @override
+  String get messageBubbleSharedLocationLabel => 'Shared location';
+
+  @override
+  String get messageBubbleSharedContactLabel => 'Shared contact';
+
+  @override
+  String messageBubbleLatLngLabel(Object lat, Object lng) {
+    return 'Lat $lat, Lng $lng';
+  }
+
+  @override
+  String get messageBubbleLoadingLinkPreview => 'Loading link preview...';
+
+  @override
+  String get messageBubbleAttachmentSentAnnouncement => 'Attachment sent';
+
+  @override
+  String get messageBubbleQuickReplyInsertedAnnouncement =>
+      'Quick reply inserted';
+
+  @override
+  String get messageBubbleDialogCancel => 'Cancel';
+
+  @override
+  String get messageBubbleDialogClose => 'Close';
+
+  @override
+  String get messageBubbleDeleteForEveryoneTitle =>
+      'Delete message for everyone?';
+
+  @override
+  String get messageBubbleDeleteForEveryoneBody =>
+      'This replaces the message with a deleted placeholder in the conversation.';
+
+  @override
+  String get messageBubbleErasePermanentlyTitle => 'Erase message permanently?';
+
+  @override
+  String get messageBubbleErasePermanentlyBody =>
+      'This removes the message record instead of showing a deleted placeholder.';
+
+  @override
+  String get messageBubbleEraseLabel => 'Erase';
+
+  @override
+  String get messageBubbleDeleteLabel => 'Delete';
+
+  @override
+  String get messageBubbleOriginalMessageGone =>
+      'The original message is no longer available.';
 }

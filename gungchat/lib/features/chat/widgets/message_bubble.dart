@@ -2,11 +2,15 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_svg/flutter_svg.dart';
 
 import '../../../app/providers.dart';
 import '../../../core/text/spoiler_renderer.dart';
+import '../../../l10n/app_localizations.dart';
+import '../../../l10n/l10n.dart';
 import '../reaction_service.dart';
 import '../link_preview_service.dart';
+import '../sticker_pack.dart';
 import '../../../models/message.dart';
 
 class MessageBubble extends ConsumerWidget {
@@ -40,6 +44,7 @@ class MessageBubble extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
     final isSystemMessage = message.type == MessageType.system;
     final alignment = isSystemMessage
       ? Alignment.center
@@ -98,7 +103,7 @@ class MessageBubble extends ConsumerWidget {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'Quoted message',
+                        l10n.messageBubbleQuotedMessage,
                         style: theme.textTheme.labelMedium,
                       ),
                       const SizedBox(height: 4),
@@ -119,7 +124,7 @@ class MessageBubble extends ConsumerWidget {
           const SizedBox(height: 8),
           if (isSystemMessage)
             Text(
-              _metadataLabel(),
+              _metadataLabel(l10n),
               style: theme.textTheme.labelSmall,
               textAlign: TextAlign.center,
             )
@@ -129,13 +134,15 @@ class MessageBubble extends ConsumerWidget {
               children: [
                 Expanded(
                   child: Text(
-                    _metadataLabel(),
+                    _metadataLabel(l10n),
                     style: theme.textTheme.labelSmall,
                   ),
                 ),
                 if (onToggleStar != null)
                   IconButton(
-                    tooltip: message.isStarred ? 'Remove star' : 'Star message',
+                    tooltip: message.isStarred
+                        ? l10n.messageBubbleRemoveStarTooltip
+                        : l10n.messageBubbleStarTooltip,
                     onPressed: onToggleStar,
                     icon: Icon(
                       message.isStarred ? Icons.star : Icons.star_border,
@@ -151,7 +158,7 @@ class MessageBubble extends ConsumerWidget {
                 if (availableActions.isNotEmpty)
                   PopupMenuButton<_MessageBubbleAction>(
                     key: const ValueKey('message-actions-button'),
-                    tooltip: 'Message actions',
+                    tooltip: l10n.messageBubbleActionsTooltip,
                     onSelected: (action) {
                       switch (action) {
                         case _MessageBubbleAction.edit:
@@ -165,22 +172,22 @@ class MessageBubble extends ConsumerWidget {
                     itemBuilder: (context) {
                       return [
                         if (availableActions.contains(_MessageBubbleAction.edit))
-                          const PopupMenuItem<_MessageBubbleAction>(
-                            key: ValueKey('message-action-edit'),
+                          PopupMenuItem<_MessageBubbleAction>(
+                            key: const ValueKey('message-action-edit'),
                             value: _MessageBubbleAction.edit,
-                            child: Text('Edit message'),
+                            child: Text(l10n.messageBubbleEditAction),
                           ),
                         if (availableActions.contains(_MessageBubbleAction.delete))
-                          const PopupMenuItem<_MessageBubbleAction>(
-                            key: ValueKey('message-action-delete'),
+                          PopupMenuItem<_MessageBubbleAction>(
+                            key: const ValueKey('message-action-delete'),
                             value: _MessageBubbleAction.delete,
-                            child: Text('Delete for everyone'),
+                            child: Text(l10n.messageBubbleDeleteForEveryoneAction),
                           ),
                         if (availableActions.contains(_MessageBubbleAction.erase))
-                          const PopupMenuItem<_MessageBubbleAction>(
-                            key: ValueKey('message-action-erase'),
+                          PopupMenuItem<_MessageBubbleAction>(
+                            key: const ValueKey('message-action-erase'),
                             value: _MessageBubbleAction.erase,
-                            child: Text('Erase permanently'),
+                            child: Text(l10n.messageBubbleErasePermanentlyAction),
                           ),
                       ];
                     },
@@ -212,7 +219,7 @@ class MessageBubble extends ConsumerWidget {
                   ),
                 if (onToggleReaction != null)
                   PopupMenuButton<String>(
-                    tooltip: 'Add reaction',
+                    tooltip: l10n.messageBubbleAddReactionTooltip,
                     onSelected: onToggleReaction,
                     itemBuilder: (context) {
                       return [
@@ -254,9 +261,10 @@ class MessageBubble extends ConsumerWidget {
   }
 
   Widget _buildBody(BuildContext context, WidgetRef ref, ThemeData theme) {
+    final l10n = context.l10n;
     if (message.isDeleted) {
       return Text(
-        'Message deleted',
+        l10n.messageBubbleMessageDeletedLabel,
         style: theme.textTheme.bodyMedium?.copyWith(
           fontStyle: FontStyle.italic,
           color: theme.colorScheme.onSurfaceVariant,
@@ -293,6 +301,17 @@ class MessageBubble extends ConsumerWidget {
     }
 
     if (message.type == MessageType.text) {
+      final stickerItem = StickerPack.tryDecode(message.body);
+      if (stickerItem != null) {
+        return SizedBox(
+          width: 128,
+          height: 128,
+          child: SvgPicture.asset(
+            stickerItem.assetPath,
+            semanticsLabel: stickerItem.label(l10n),
+          ),
+        );
+      }
       final hasSpoilers = SpoilerRenderer.hasSpoilers(message.body);
       final previewUrl = LinkPreviewService.extractFirstUrl(
         hasSpoilers ? SpoilerRenderer.visibleText(message.body) : message.body,
@@ -344,16 +363,18 @@ class MessageBubble extends ConsumerWidget {
     return '${rawValue.substring(0, 96)}...';
   }
 
-  String _metadataLabel() {
+  String _metadataLabel(AppLocalizations l10n) {
     final created = _formatTime(message.createdAt);
     if (message.type == MessageType.system) {
       return created;
     }
-    final burnLabel = message.burnAfterRead ? 'Burn-after-read' : 'Persistent';
+    final burnLabel = message.burnAfterRead
+        ? l10n.messageBubbleBurnAfterReadBadge
+        : l10n.messageBubblePersistentBadge;
     final status = message.isDeleted
-        ? 'deleted'
+        ? l10n.messageBubbleDeletedMarker
         : message.isEdited
-            ? 'edited'
+            ? l10n.messageBubbleEditedMarker
             : null;
     return [created, message.deliveryState.name, burnLabel, if (status != null) status]
         .join(' • ');
@@ -454,10 +475,11 @@ class _HiddenSpoilerChip extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
 
     return Semantics(
       button: true,
-      label: 'Spoiler, tap to reveal',
+      label: l10n.messageBubbleSpoilerHint,
       child: GestureDetector(
         behavior: HitTestBehavior.opaque,
         onTap: onTap,
@@ -470,7 +492,7 @@ class _HiddenSpoilerChip extends StatelessWidget {
             child: Padding(
               padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
               child: Text(
-                'Spoiler',
+                l10n.messageBubbleSpoilerLabel,
                 style: theme.textTheme.bodyMedium?.copyWith(
                   color: theme.colorScheme.onInverseSurface,
                 ),
@@ -497,13 +519,16 @@ class _AudioMessagePreview extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final l10n = context.l10n;
     final barHeights = const <double>[8, 14, 10, 18, 12, 16, 9, 15, 11, 7];
 
     return Row(
       mainAxisSize: MainAxisSize.min,
       children: [
         IconButton(
-          tooltip: isPlayingAudio ? 'Stop voice message' : 'Play voice message',
+          tooltip: isPlayingAudio
+              ? l10n.messageBubbleStopVoiceTooltip
+              : l10n.messageBubblePlayVoiceTooltip,
           onPressed: onPlayAudio,
           icon: Icon(isPlayingAudio ? Icons.stop_circle : Icons.play_circle),
           visualDensity: VisualDensity.compact,
@@ -516,7 +541,7 @@ class _AudioMessagePreview extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                'Voice message',
+                l10n.messageBubbleVoiceMessageLabel,
                 style: theme.textTheme.bodyMedium,
               ),
               const SizedBox(height: 6),
@@ -583,6 +608,7 @@ class _LocationAttachmentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     final latitude = attachment.metadata['latitude'];
     final longitude = attachment.metadata['longitude'];
 
@@ -602,11 +628,14 @@ class _LocationAttachmentCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    'Shared location',
+                    l10n.messageBubbleSharedLocationLabel,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 4),
-                  Text('Lat $latitude, Lng $longitude'),
+                  Text(l10n.messageBubbleLatLngLabel(
+                    latitude.toString(),
+                    longitude.toString(),
+                  )),
                 ],
               ),
             ),
@@ -624,6 +653,7 @@ class _ContactAttachmentCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final l10n = context.l10n;
     return DecoratedBox(
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
@@ -640,7 +670,7 @@ class _ContactAttachmentCard extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    (attachment.metadata['displayName'] as String?) ?? 'Shared contact',
+                    (attachment.metadata['displayName'] as String?) ?? l10n.messageBubbleSharedContactLabel,
                     style: Theme.of(context).textTheme.titleSmall,
                   ),
                   const SizedBox(height: 4),
@@ -818,18 +848,18 @@ class _LinkPreviewLoadingCard extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
         color: theme.colorScheme.surface.withValues(alpha: 0.45),
       ),
-      child: const Padding(
-        padding: EdgeInsets.all(10),
+      child: Padding(
+        padding: const EdgeInsets.all(10),
         child: Row(
           mainAxisSize: MainAxisSize.min,
           children: [
-            SizedBox(
+            const SizedBox(
               width: 14,
               height: 14,
               child: CircularProgressIndicator(strokeWidth: 2),
             ),
-            SizedBox(width: 8),
-            Text('Loading link preview...'),
+            const SizedBox(width: 8),
+            Text(context.l10n.messageBubbleLoadingLinkPreview),
           ],
         ),
       ),

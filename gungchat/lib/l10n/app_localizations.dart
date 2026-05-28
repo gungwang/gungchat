@@ -1170,6 +1170,438 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Cancel reply'**
   String get cancelReplyTooltip;
+
+  /// No description provided for @composerSendAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Send'**
+  String get composerSendAction;
+
+  /// No description provided for @composerSaveLocalAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Local Message'**
+  String get composerSaveLocalAction;
+
+  /// No description provided for @composerWaitForSecureChannel.
+  ///
+  /// In en, this message translates to:
+  /// **'Wait For Secure Channel'**
+  String get composerWaitForSecureChannel;
+
+  /// No description provided for @composerSaveMessageEditAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Save Message Edit'**
+  String get composerSaveMessageEditAction;
+
+  /// No description provided for @composerConnectAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Connect'**
+  String get composerConnectAction;
+
+  /// No description provided for @composerBurnAfterReadLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Burn after read'**
+  String get composerBurnAfterReadLabel;
+
+  /// No description provided for @composerRecordVoiceTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Record voice'**
+  String get composerRecordVoiceTooltip;
+
+  /// No description provided for @composerStopAndSendVoiceTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop and send voice'**
+  String get composerStopAndSendVoiceTooltip;
+
+  /// No description provided for @composerMoreActionsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'More actions'**
+  String get composerMoreActionsTooltip;
+
+  /// No description provided for @composerBootstrapHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type a local encrypted message draft...'**
+  String get composerBootstrapHint;
+
+  /// No description provided for @composerPeerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type an encrypted message for the active peer session...'**
+  String get composerPeerHint;
+
+  /// No description provided for @composerEditHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Update your encrypted message for the active peer session...'**
+  String get composerEditHint;
+
+  /// No description provided for @composerHelpHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Type /help for local commands, or complete the signal exchange to enable sending.'**
+  String get composerHelpHint;
+
+  /// No description provided for @composerBlockedHint.
+  ///
+  /// In en, this message translates to:
+  /// **'This contact is blocked. Slash commands still run locally.'**
+  String get composerBlockedHint;
+
+  /// No description provided for @composerOpenSessionForStickers.
+  ///
+  /// In en, this message translates to:
+  /// **'Open a secure session before sending stickers.'**
+  String get composerOpenSessionForStickers;
+
+  /// No description provided for @composerFinishSignalExchangeWarning.
+  ///
+  /// In en, this message translates to:
+  /// **'Finish the signal exchange before sending peer messages.'**
+  String get composerFinishSignalExchangeWarning;
+
+  /// No description provided for @composerOpenSessionBeforeSend.
+  ///
+  /// In en, this message translates to:
+  /// **'Open or answer a session with {name} before sending.'**
+  String composerOpenSessionBeforeSend(Object name);
+
+  /// No description provided for @composerRecordingHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Recording voice message... tap Stop & Send when ready. Up to 2 minutes.'**
+  String get composerRecordingHint;
+
+  /// No description provided for @composerOpenChannelBeforeRecording.
+  ///
+  /// In en, this message translates to:
+  /// **'Open the secure channel before recording voice messages.'**
+  String get composerOpenChannelBeforeRecording;
+
+  /// No description provided for @composerMicrophoneError.
+  ///
+  /// In en, this message translates to:
+  /// **'Could not access the microphone. Check app permissions and device microphone settings.'**
+  String get composerMicrophoneError;
+
+  /// No description provided for @composerEditLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit secure message'**
+  String get composerEditLabel;
+
+  /// No description provided for @composerSecureLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Secure peer message'**
+  String get composerSecureLabel;
+
+  /// No description provided for @composerBootstrapLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Bootstrap message'**
+  String get composerBootstrapLabel;
+
+  /// No description provided for @composerPeerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Peer message'**
+  String get composerPeerLabel;
+
+  /// No description provided for @composerTypingStatus.
+  ///
+  /// In en, this message translates to:
+  /// **'{name} is typing...'**
+  String composerTypingStatus(Object name);
+
+  /// No description provided for @attachmentMenuGallery.
+  ///
+  /// In en, this message translates to:
+  /// **'Gallery'**
+  String get attachmentMenuGallery;
+
+  /// No description provided for @attachmentMenuFiles.
+  ///
+  /// In en, this message translates to:
+  /// **'Files'**
+  String get attachmentMenuFiles;
+
+  /// No description provided for @attachmentMenuLocation.
+  ///
+  /// In en, this message translates to:
+  /// **'Location'**
+  String get attachmentMenuLocation;
+
+  /// No description provided for @attachmentMenuContact.
+  ///
+  /// In en, this message translates to:
+  /// **'Contact'**
+  String get attachmentMenuContact;
+
+  /// No description provided for @attachmentMenuSticker.
+  ///
+  /// In en, this message translates to:
+  /// **'Sticker'**
+  String get attachmentMenuSticker;
+
+  /// No description provided for @stickerPickerTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Stickers'**
+  String get stickerPickerTitle;
+
+  /// No description provided for @stickerLabelSmile.
+  ///
+  /// In en, this message translates to:
+  /// **'Smile'**
+  String get stickerLabelSmile;
+
+  /// No description provided for @stickerLabelHeart.
+  ///
+  /// In en, this message translates to:
+  /// **'Heart'**
+  String get stickerLabelHeart;
+
+  /// No description provided for @stickerLabelThumbs.
+  ///
+  /// In en, this message translates to:
+  /// **'Thumbs up'**
+  String get stickerLabelThumbs;
+
+  /// No description provided for @stickerLabelParty.
+  ///
+  /// In en, this message translates to:
+  /// **'Party'**
+  String get stickerLabelParty;
+
+  /// No description provided for @stickerLabelFire.
+  ///
+  /// In en, this message translates to:
+  /// **'Fire'**
+  String get stickerLabelFire;
+
+  /// No description provided for @stickerLabelSad.
+  ///
+  /// In en, this message translates to:
+  /// **'Sad'**
+  String get stickerLabelSad;
+
+  /// No description provided for @stickerLabelOk.
+  ///
+  /// In en, this message translates to:
+  /// **'OK'**
+  String get stickerLabelOk;
+
+  /// No description provided for @stickerLabelClap.
+  ///
+  /// In en, this message translates to:
+  /// **'Clap'**
+  String get stickerLabelClap;
+
+  /// No description provided for @messageBubbleQuotedMessage.
+  ///
+  /// In en, this message translates to:
+  /// **'Quoted message'**
+  String get messageBubbleQuotedMessage;
+
+  /// No description provided for @messageBubbleStarTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Star message'**
+  String get messageBubbleStarTooltip;
+
+  /// No description provided for @messageBubbleRemoveStarTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Remove star'**
+  String get messageBubbleRemoveStarTooltip;
+
+  /// No description provided for @messageBubbleActionsTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Message actions'**
+  String get messageBubbleActionsTooltip;
+
+  /// No description provided for @messageBubbleEditAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Edit message'**
+  String get messageBubbleEditAction;
+
+  /// No description provided for @messageBubbleDeleteForEveryoneAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete for everyone'**
+  String get messageBubbleDeleteForEveryoneAction;
+
+  /// No description provided for @messageBubbleErasePermanentlyAction.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase permanently'**
+  String get messageBubbleErasePermanentlyAction;
+
+  /// No description provided for @messageBubbleAddReactionTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Add reaction'**
+  String get messageBubbleAddReactionTooltip;
+
+  /// No description provided for @messageBubbleMessageDeletedLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Message deleted'**
+  String get messageBubbleMessageDeletedLabel;
+
+  /// No description provided for @messageBubbleBurnAfterReadBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Burn-after-read'**
+  String get messageBubbleBurnAfterReadBadge;
+
+  /// No description provided for @messageBubblePersistentBadge.
+  ///
+  /// In en, this message translates to:
+  /// **'Persistent'**
+  String get messageBubblePersistentBadge;
+
+  /// No description provided for @messageBubbleDeletedMarker.
+  ///
+  /// In en, this message translates to:
+  /// **'deleted'**
+  String get messageBubbleDeletedMarker;
+
+  /// No description provided for @messageBubbleEditedMarker.
+  ///
+  /// In en, this message translates to:
+  /// **'edited'**
+  String get messageBubbleEditedMarker;
+
+  /// No description provided for @messageBubbleSpoilerLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Spoiler'**
+  String get messageBubbleSpoilerLabel;
+
+  /// No description provided for @messageBubbleSpoilerHint.
+  ///
+  /// In en, this message translates to:
+  /// **'Spoiler, tap to reveal'**
+  String get messageBubbleSpoilerHint;
+
+  /// No description provided for @messageBubblePlayVoiceTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Play voice message'**
+  String get messageBubblePlayVoiceTooltip;
+
+  /// No description provided for @messageBubbleStopVoiceTooltip.
+  ///
+  /// In en, this message translates to:
+  /// **'Stop voice message'**
+  String get messageBubbleStopVoiceTooltip;
+
+  /// No description provided for @messageBubbleVoiceMessageLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Voice message'**
+  String get messageBubbleVoiceMessageLabel;
+
+  /// No description provided for @messageBubbleSharedLocationLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared location'**
+  String get messageBubbleSharedLocationLabel;
+
+  /// No description provided for @messageBubbleSharedContactLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Shared contact'**
+  String get messageBubbleSharedContactLabel;
+
+  /// No description provided for @messageBubbleLatLngLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Lat {lat}, Lng {lng}'**
+  String messageBubbleLatLngLabel(Object lat, Object lng);
+
+  /// No description provided for @messageBubbleLoadingLinkPreview.
+  ///
+  /// In en, this message translates to:
+  /// **'Loading link preview...'**
+  String get messageBubbleLoadingLinkPreview;
+
+  /// No description provided for @messageBubbleAttachmentSentAnnouncement.
+  ///
+  /// In en, this message translates to:
+  /// **'Attachment sent'**
+  String get messageBubbleAttachmentSentAnnouncement;
+
+  /// No description provided for @messageBubbleQuickReplyInsertedAnnouncement.
+  ///
+  /// In en, this message translates to:
+  /// **'Quick reply inserted'**
+  String get messageBubbleQuickReplyInsertedAnnouncement;
+
+  /// No description provided for @messageBubbleDialogCancel.
+  ///
+  /// In en, this message translates to:
+  /// **'Cancel'**
+  String get messageBubbleDialogCancel;
+
+  /// No description provided for @messageBubbleDialogClose.
+  ///
+  /// In en, this message translates to:
+  /// **'Close'**
+  String get messageBubbleDialogClose;
+
+  /// No description provided for @messageBubbleDeleteForEveryoneTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete message for everyone?'**
+  String get messageBubbleDeleteForEveryoneTitle;
+
+  /// No description provided for @messageBubbleDeleteForEveryoneBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This replaces the message with a deleted placeholder in the conversation.'**
+  String get messageBubbleDeleteForEveryoneBody;
+
+  /// No description provided for @messageBubbleErasePermanentlyTitle.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase message permanently?'**
+  String get messageBubbleErasePermanentlyTitle;
+
+  /// No description provided for @messageBubbleErasePermanentlyBody.
+  ///
+  /// In en, this message translates to:
+  /// **'This removes the message record instead of showing a deleted placeholder.'**
+  String get messageBubbleErasePermanentlyBody;
+
+  /// No description provided for @messageBubbleEraseLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Erase'**
+  String get messageBubbleEraseLabel;
+
+  /// No description provided for @messageBubbleDeleteLabel.
+  ///
+  /// In en, this message translates to:
+  /// **'Delete'**
+  String get messageBubbleDeleteLabel;
+
+  /// No description provided for @messageBubbleOriginalMessageGone.
+  ///
+  /// In en, this message translates to:
+  /// **'The original message is no longer available.'**
+  String get messageBubbleOriginalMessageGone;
 }
 
 class _AppLocalizationsDelegate
